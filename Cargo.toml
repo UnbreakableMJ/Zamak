@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "mjloader",
+    "libmjboot",
+]
+resolver = "2"

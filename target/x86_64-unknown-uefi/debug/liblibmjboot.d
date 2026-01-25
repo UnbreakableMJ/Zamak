@@ -1,0 +1,1 @@
+/home/mj/mjboot/mjboot-rust/target/x86_64-unknown-uefi/debug/liblibmjboot.rlib: /home/mj/mjboot/mjboot-rust/libmjboot/src/config.rs /home/mj/mjboot/mjboot-rust/libmjboot/src/elf.rs /home/mj/mjboot/mjboot-rust/libmjboot/src/lib.rs /home/mj/mjboot/mjboot-rust/libmjboot/src/protocol.rs

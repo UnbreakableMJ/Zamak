@@ -1,0 +1,4 @@
+x86_64::structures::paging::Page<_>
+x86_64::structures::paging::Size1GiB
+x86_64::structures::paging::Size2MiB
+x86_64::structures::paging::Size4KiB

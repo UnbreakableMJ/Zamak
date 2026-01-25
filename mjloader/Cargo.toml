@@ -1,0 +1,12 @@
+[package]
+name = "mjloader"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+uefi = { version = "0.24", features = ["alloc"] }
+uefi-services = "0.21"
+limine-protocol = "0.5"
+libmjboot = { path = "../libmjboot" }
+log = "0.4"
+x86_64 = { version = "0.15", default-features = false, features = ["instructions"] }
