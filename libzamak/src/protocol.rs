@@ -31,21 +31,21 @@ pub struct RawRequest {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct BootloaderInfoResponse {
     pub name: u64,    // Pointer to string
     pub version: u64, // Pointer to string
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct HhdmResponse {
     pub revision: u64,
     pub offset: u64,
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct MemmapResponse {
     pub revision: u64,
     pub entry_count: u64,
@@ -70,7 +70,7 @@ pub const MEMMAP_KERNEL_AND_MODULES: u32 = 6;
 pub const MEMMAP_FRAMEBUFFER: u32 = 7;
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct FramebufferResponse {
     pub revision: u64,
     pub framebuffer_count: u64,
@@ -78,7 +78,7 @@ pub struct FramebufferResponse {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct Framebuffer {
     pub address: u64,
     pub width: u64,
