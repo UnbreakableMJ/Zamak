@@ -1,0 +1,9 @@
+[target.i686-zamak]
+linker = "rust-lld"
+rustflags = [
+    "-C", "link-arg=-Tzamak-bios/linker.ld",
+    "-C", "link-arg=--oformat=elf32-i386",
+]
+
+[build]
+target = "i686-zamak.json"

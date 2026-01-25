@@ -1,0 +1,8 @@
+[package]
+name = "libzamak"
+version = "0.2.0"
+edition = "2021"
+
+[dependencies]
+limine-protocol = "0.5"
+goblin = { version = "0.7", default-features = false, features = ["elf64", "elf32", "endian_fd", "alloc"] }

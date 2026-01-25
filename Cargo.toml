@@ -1,6 +1,15 @@
 [workspace]
 members = [
-    "mjloader",
-    "libmjboot",
+    "zamak-loader",
+    "libzamak",
+    "zamak-bios",
 ]
 resolver = "2"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1

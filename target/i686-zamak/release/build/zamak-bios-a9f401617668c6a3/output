@@ -1,0 +1,4 @@
+NASM version 2.16.03 compiled on Apr 17 2024
+cargo:rerun-if-changed=src/entry.asm
+cargo:rustc-link-search=native=/home/mj/mjboot/mjboot-rust/target/i686-zamak/release/build/zamak-bios-a9f401617668c6a3/out
+cargo:rustc-link-lib=static=entry

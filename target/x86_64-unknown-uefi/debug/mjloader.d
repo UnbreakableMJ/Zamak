@@ -1,1 +1,0 @@
-/home/mj/mjboot/mjboot-rust/target/x86_64-unknown-uefi/debug/mjloader.efi: /home/mj/mjboot/mjboot-rust/libmjboot/src/config.rs /home/mj/mjboot/mjboot-rust/libmjboot/src/elf.rs /home/mj/mjboot/mjboot-rust/libmjboot/src/lib.rs /home/mj/mjboot/mjboot-rust/libmjboot/src/protocol.rs /home/mj/mjboot/mjboot-rust/mjloader/src/main.rs

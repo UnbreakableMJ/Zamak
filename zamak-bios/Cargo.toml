@@ -1,0 +1,19 @@
+[package]
+name = "zamak-bios"
+version = "0.2.0"
+edition = "2021"
+
+[dependencies]
+libzamak = { path = "../libzamak" }
+log = "0.4"
+x86_64 = { version = "0.15", default-features = false, features = ["instructions"] }
+limine-protocol = "0.5"
+goblin = { version = "0.7", default-features = false, features = ["elf32", "elf64"] }
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1

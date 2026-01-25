@@ -1,0 +1,12 @@
+[package]
+name = "zamak-loader"
+version = "0.2.0"
+edition = "2021"
+
+[dependencies]
+uefi = "0.24"
+uefi-services = "0.21"
+limine-protocol = "0.5"
+libzamak = { path = "../libzamak" }
+log = "0.4"
+x86_64 = { version = "0.15", default-features = false, features = ["instructions"] }

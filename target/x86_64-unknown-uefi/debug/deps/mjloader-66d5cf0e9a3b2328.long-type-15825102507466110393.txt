@@ -1,1 +1,0 @@
-(uefi::table::SystemTable<Runtime>, MemoryMap<'static>)
