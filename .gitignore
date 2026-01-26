@@ -1,5 +1,24 @@
+# Rust artifacts
 target/
-*.img
+
+# Compilation results
 *.bin
+*.img
 *.efi
 *.pdb
+*.d
+*.obj
+*.o
+
+# Antigravity/Internal
+.gemini/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated
+.DS_Store
+Thumbs.db
