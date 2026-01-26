@@ -24,7 +24,7 @@ init:
     ; (This would be patched by an installer in a real scenario)
     mov eax, [stage2_lba]
     mov bx, 0x8000       ; Load to 0x8000
-    mov cx, 32           ; 32 sectors
+    mov cx, [stage2_size] ; sectors
     call read_sectors
 
     ; Jump to Stage 2
@@ -91,10 +91,12 @@ dap_lba:
     dq 1                 ; LBA (64-bit)
 
 ; Patchable fields
-align 4
-stage2_lba dd 1         ; LBA of Stage 2 (to be patched by installer)
+times 440-($-$$) db 0
+stage2_lba dd 1         ; LBA of Stage 2 at offset 440
+stage2_size dw 32       ; Size in sectors at offset 444
 
-times 446-($-$$) db 0   ; Padding to Partition Table
+; Partition Table (16 bytes * 4) at offset 446
+times 446-($-$$) db 0   
 
 ; Partition Table (16 bytes * 4)
 times 64 db 0

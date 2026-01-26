@@ -1,0 +1,5 @@
+TIMEOUT=5
+
+:Zamak OS
+    PROTOCOL=limine
+    KERNEL_PATH=/BOOT/KERNEL
