@@ -25,6 +25,7 @@ pub const MODULE_ID: [u64; 2] = [0x3e7e279702ece32d, 0x4dca2a803f2601ee];
 pub const RSDP_ID: [u64; 2] = [0xc5e728f5b803f261, 0x82b2d32e2601dfa5];
 pub const SMBIOS_ID: [u64; 2] = [0x9e3005603972627e, 0x4f6a2a0b3f2601ee];
 pub const KERNEL_FILE_ID: [u64; 2] = [0xad97e30e1e2d777a, 0x24ef2cd0a8e77b21];
+pub const SMP_ID: [u64; 2] = [0x95a1aed3e22b777a, 0xa5a1aed3e22b777a];
 
 #[repr(C)]
 #[derive(Debug)]
@@ -147,6 +148,26 @@ pub struct SmbiosResponse {
 pub struct KernelFileResponse {
     pub revision: u64,
     pub kernel_file: u64, // Pointer to File
+}
+
+#[repr(C)]
+#[derive(Debug, Default, Clone, Copy)]
+pub struct SmpResponse {
+    pub revision: u64,
+    pub flags: u32,
+    pub bsp_lapic_id: u32,
+    pub cpu_count: u64,
+    pub cpus: u64, // Pointer to array of pointers to SmpInfo
+}
+
+#[repr(C)]
+#[derive(Debug, Default, Clone, Copy)]
+pub struct SmpInfo {
+    pub processor_id: u32,
+    pub lapic_id: u32,
+    pub reserved: u64,
+    pub goto_address: u64,
+    pub extra_argument: u64,
 }
 
 pub fn scan_requests(kernel_bytes: &[u8]) -> Vec<*mut RawRequest> {

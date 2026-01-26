@@ -1,1 +1,0 @@
-/home/mj/mjboot/zamak/target/x86_64-unknown-uefi/release/zamak-loader.efi: /home/mj/mjboot/zamak/libzamak/src/config.rs /home/mj/mjboot/zamak/libzamak/src/elf.rs /home/mj/mjboot/zamak/libzamak/src/lib.rs /home/mj/mjboot/zamak/libzamak/src/protocol.rs /home/mj/mjboot/zamak/zamak-loader/src/main.rs

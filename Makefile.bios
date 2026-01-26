@@ -7,7 +7,10 @@ STAGE2_DIR = zamak-bios
 TARGET_JSON = i686-zamak.json
 IMAGE = zamak_bios.img
 
-all: $(IMAGE)
+all: trampoline.bin $(IMAGE)
+
+trampoline.bin: zamak-bios/stage1/trampoline.asm
+	$(NASM) -f bin zamak-bios/stage1/trampoline.asm -o trampoline.bin
 
 $(IMAGE): mbr.bin stage2.bin
 	cat mbr.bin stage2.bin > $(IMAGE)
@@ -22,5 +25,5 @@ stage2.bin:
 	$(OBJCOPY) -O binary target/i686-zamak/release/zamak-bios stage2.bin
 
 clean:
-	rm -f mbr.bin stage2.bin $(IMAGE)
+	rm -f mbr.bin stage2.bin trampoline.bin $(IMAGE)
 	cd $(STAGE2_DIR) && $(CARGO) clean

@@ -12,6 +12,7 @@ pub mod utils;
 pub mod mmap;
 pub mod paging;
 pub mod vbe;
+pub mod smp;
 
 use disk::Disk;
 use fat32::Fat32;
@@ -45,6 +46,7 @@ fn fulfill_requests(
     kernel_file: Option<*const protocol::File>,
     modules: &[protocol::File],
     rsdp: Option<u64>,
+    smp: Option<protocol::SmpResponse>,
     requests: &[*mut protocol::RawRequest]
 ) {
     for &req_ptr in requests {
@@ -116,6 +118,12 @@ fn fulfill_requests(
                         module_count: file_list.len() as u64,
                         modules: file_list.as_ptr() as u64,
                     }));
+                    req.response = response as *mut _ as u64;
+                }
+            }
+            protocol::SMP_ID => {
+                if let Some(s) = smp {
+                    let response = Box::leak(Box::new(s));
                     req.response = response as *mut _ as u64;
                 }
             }
@@ -212,6 +220,28 @@ pub extern "C" fn kmain(drive_id: u8) -> ! {
                                     // Prepare ACPI/RSDP
                                     let rsdp = find_rsdp();
 
+                                    // SMP Discovery and Startup
+                                    let mut smp_response = None;
+                                    if let Some(rsdp_addr) = rsdp {
+                                        let (lapic_addr, cpus) = smp::parse_madt(rsdp_addr);
+                                        let pml4 = paging::setup_paging(info.segments[0].paddr, kernel_vaddr_start, kernel_size);
+                                        let smp_list = smp::start_aps(lapic_addr, &cpus, pml4.as_u64());
+                                        
+                                        let mut smp_info_ptrs = Vec::new();
+                                        for info in smp_list {
+                                            smp_info_ptrs.push(Box::leak(Box::new(info)) as *const protocol::SmpInfo);
+                                        }
+                                        let smp_ptr = Box::leak(smp_info_ptrs.into_boxed_slice());
+
+                                        smp_response = Some(protocol::SmpResponse {
+                                            revision: 0,
+                                            flags: 0,
+                                            bsp_lapic_id: { *((lapic_addr + 0x20) as *const u32) >> 24 } as u32,
+                                            cpu_count: smp_ptr.len() as u64,
+                                            cpus: smp_ptr.as_ptr() as u64,
+                                        });
+                                    }
+
                                     // Prepare Kernel File
                                     let kf_data = Box::leak(kernel_buf.into_boxed_slice());
                                     let kf = Box::leak(Box::new(protocol::File {
@@ -230,12 +260,11 @@ pub extern "C" fn kmain(drive_id: u8) -> ! {
                                         all_requests.append(&mut reqs);
                                     }
                                     
-                                    fulfill_requests(&mmap_entries, vbe_fb, Some(kf), &loaded_modules, rsdp, &all_requests);
+                                    fulfill_requests(&mmap_entries, vbe_fb, Some(kf), &loaded_modules, rsdp, smp_response, &all_requests);
 
-                                    // Setup Paging
-                                    let pml4 = paging::setup_paging(info.segments[0].paddr, kernel_vaddr_start, kernel_size);
-                                    
                                     // Enter Long Mode
+                                    // Paging already setup above
+                                    let pml4 = paging::setup_paging(info.segments[0].paddr, kernel_vaddr_start, kernel_size);
                                     *(0x5FF0 as *mut u64) = info.entry;
                                     enter_long_mode(pml4.as_u64() as u32, info.entry);
                                 }

@@ -153,6 +153,7 @@ fn fulfill_requests(
     system_table: &SystemTable<Boot>, 
     kernel_file: Option<*const protocol::File>,
     modules: &[protocol::File],
+    smp: Option<protocol::SmpResponse>,
     requests: &[*mut protocol::RawRequest]
 ) {
     for &req_ptr in requests {
@@ -306,6 +307,13 @@ fn fulfill_requests(
                     info!("  -> Fulfilled MODULES ({})", file_list.len());
                 }
             }
+            protocol::SMP_ID => {
+                if let Some(s) = smp {
+                    let response = Box::leak(Box::new(s));
+                    req.response = response as *mut _ as u64;
+                    info!("  -> Fulfilled SMP ({} CPUs)", s.cpu_count);
+                }
+            }
             _ => {
                 info!("  -> Unknown or unhandled request");
             }
@@ -423,7 +431,47 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                             ..Default::default()
                         }));
 
-                        fulfill_requests(&system_table, Some(kf), &loaded_modules, &relocated_requests);
+                        // SMP Discovery (UEFI)
+                        let mut smp_response = None;
+                        if let Ok(mp_handle) = boot_services.get_handle_for_protocol::<uefi::proto::pi::mp::MpServices>() {
+                            if let Ok(mp) = boot_services.open_protocol_exclusive::<uefi::proto::pi::mp::MpServices>(mp_handle) {
+                                let count = mp.get_number_of_processors().expect("Failed to get CPU count");
+                                let total_cpus = count.total;
+                                info!("UEFI SMP: {} total CPUs, {} enabled", total_cpus, count.enabled);
+                                
+                                let mut smp_infos = Vec::new();
+                                let mut bsp_lapic_id = 0;
+                                
+                                for i in 0..total_cpus {
+                                    let info = mp.get_processor_info(i).expect("Failed to get CPU info");
+                                    if info.is_bsp() {
+                                        bsp_lapic_id = info.location.package as u32; 
+                                    }
+                                    
+                                    smp_infos.push(protocol::SmpInfo {
+                                        processor_id: i as u32,
+                                        lapic_id: info.location.package as u32,
+                                        ..Default::default()
+                                    });
+                                }
+                                
+                                let mut smp_info_ptrs = Vec::new();
+                                for info in smp_infos {
+                                    smp_info_ptrs.push(Box::leak(Box::new(info)) as *const protocol::SmpInfo);
+                                }
+                                let smp_ptr = Box::leak(smp_info_ptrs.into_boxed_slice());
+
+                                smp_response = Some(protocol::SmpResponse {
+                                    revision: 0,
+                                    flags: 0,
+                                    bsp_lapic_id,
+                                    cpu_count: smp_ptr.len() as u64,
+                                    cpus: smp_ptr.as_ptr() as u64,
+                                });
+                            }
+                        }
+
+                        fulfill_requests(&system_table, Some(kf), &loaded_modules, smp_response, &relocated_requests);
 
                         let pml4_phys = setup_paging(boot_services, &loaded_kernel);
                         boot_data = Some((pml4_phys, elf_info.entry));
