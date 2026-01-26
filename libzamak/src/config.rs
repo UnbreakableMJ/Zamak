@@ -9,6 +9,7 @@ use alloc::string::ToString;
 pub struct Config {
     pub global_options: BTreeMap<String, String>,
     pub entries: Vec<MenuEntry>,
+    pub timeout: u64,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -29,6 +30,7 @@ pub struct MenuEntry {
 
 pub fn parse(content: &str) -> Config {
     let mut config = Config::default();
+    config.timeout = 5; // Default timeout
     let mut current_entry: Option<MenuEntry> = None;
 
     for line in content.lines() {
@@ -78,6 +80,11 @@ pub fn parse(content: &str) -> Config {
                     }
                 }
             } else {
+                if key == "TIMEOUT" {
+                    if let Ok(val) = value.parse::<u64>() {
+                        config.timeout = val;
+                    }
+                }
                 config.global_options.insert(key, value);
             }
         }

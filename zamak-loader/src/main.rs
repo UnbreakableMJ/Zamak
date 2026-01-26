@@ -26,6 +26,45 @@ use x86_64::{
     PhysAddr, VirtAddr,
 };
 
+struct UefiInput<'a> {
+    stdin: &'a mut uefi::proto::console::text::Input,
+    boot_services: &'a uefi::table::boot::BootServices,
+}
+
+impl<'a> libzamak::tui::InputSource for UefiInput<'a> {
+    fn read_key(&mut self) -> libzamak::tui::Key {
+        use uefi::proto::console::text::{Key, ScanCode};
+        
+        // Non-blocking check
+        let event = unsafe { self.stdin.wait_for_key_event().unsafe_clone() };
+        if self.boot_services.check_event(event).is_err() {
+            return libzamak::tui::Key::None;
+        }
+
+        if let Ok(Some(key)) = self.stdin.read_key() {
+            match key {
+                Key::Printable(c) => {
+                    let char_code = char::from(c);
+                    match char_code {
+                        'k' => libzamak::tui::Key::Char('k'),
+                        'j' => libzamak::tui::Key::Char('j'),
+                        'i' => libzamak::tui::Key::Char('i'),
+                        '\r' | '\n' => libzamak::tui::Key::Enter,
+                        _ => libzamak::tui::Key::Char(char_code), 
+                    }
+                },
+                Key::Special(ScanCode::UP) => libzamak::tui::Key::Up,
+                Key::Special(ScanCode::DOWN) => libzamak::tui::Key::Down,
+                Key::Special(ScanCode::ESCAPE) => libzamak::tui::Key::Esc,
+                _ => libzamak::tui::Key::None,
+            }
+        } else {
+            libzamak::tui::Key::None
+        }
+    }
+}
+
+
 struct UefiFrameAllocator<'a>(&'a BootServices);
 
 unsafe impl FrameAllocator<Size4KiB> for UefiFrameAllocator<'_> {
@@ -363,7 +402,94 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                 let config_str = core::str::from_utf8(&config_data).expect("Config is not UTF-8");
                 let config = config::parse(config_str);
                 
-                if let Some(entry) = config.entries.first() {
+                // 2. Initialize graphics for TUI (GOP)
+                let gop_handle = boot_services.get_handle_for_protocol::<GraphicsOutput>().expect("Missing GOP");
+                let mut gop = boot_services.open_protocol_exclusive::<GraphicsOutput>(gop_handle).expect("Failed to open GOP");
+                
+                let mut selected_idx = 0;
+
+                {
+                    // TUI Scope
+                    use libzamak::tui::{MenuState, draw_menu, InputSource};
+                    use libzamak::font::{PsfFont, DEFAULT_FONT};
+                    use libzamak::gfx::Canvas;
+                    
+                    let mode_info = gop.current_mode_info();
+                    let mut fb_struct = protocol::Framebuffer {
+                        address: gop.frame_buffer().as_mut_ptr() as u64,
+                        width: mode_info.resolution().0 as u64,
+                        height: mode_info.resolution().1 as u64,
+                        pitch: mode_info.stride() as u64 * 4, 
+                        bpp: 32,
+                        red_mask_size: 8, red_mask_shift: 16, // Typical BGR
+                        green_mask_size: 8, green_mask_shift: 8,
+                        blue_mask_size: 8, blue_mask_shift: 0,
+                        ..Default::default()
+                    };
+                    
+                    // Pixel format adjustment
+                    match mode_info.pixel_format() {
+                        uefi::proto::console::gop::PixelFormat::Rgb => {
+                            fb_struct.red_mask_shift = 0; fb_struct.blue_mask_shift = 16;
+                        },
+                        uefi::proto::console::gop::PixelFormat::Bgr => {
+                            fb_struct.red_mask_shift = 16; fb_struct.blue_mask_shift = 0;
+                        },
+                        _ => {}
+                    }
+                
+                    let font = PsfFont::parse(DEFAULT_FONT).unwrap();
+                    let mut canvas = Canvas::new(&mut fb_struct);
+                    
+                    // Unsafe borrow split to satisfy borrow checker with persistent boot_services
+                    let st_ptr = (&system_table as *const SystemTable<Boot>) as *mut SystemTable<Boot>;
+                    let stdin = unsafe { (*st_ptr).stdin() };
+                    // boot_services is already available from outer scope
+                    
+                    let mut input = UefiInput { stdin, boot_services };
+                    
+                    let mut state = MenuState::new(config.timeout);
+                    let mut time_remaining = config.timeout * 10;
+                    
+                    loop {
+                        draw_menu(&mut canvas, &font, &config, &state, time_remaining);
+                        
+                        let key = input.read_key();
+                        // Simple stall if no key
+                        if let libzamak::tui::Key::None = key {
+                            boot_services.stall(100_000);
+                            if time_remaining > 0 { time_remaining -= 1; }
+                            if time_remaining == 0 { break; } 
+                        } else {
+                            // Interaction resets timeout
+                            time_remaining = 0;
+                        }
+
+                        match key {
+                            libzamak::tui::Key::Up       => { if state.selected_idx > 0 { state.selected_idx -= 1; } },
+                            libzamak::tui::Key::Down     => { if state.selected_idx < config.entries.len() - 1 { state.selected_idx += 1; } },
+                            libzamak::tui::Key::Char('k') => { if state.selected_idx > 0 { state.selected_idx -= 1; } },
+                            libzamak::tui::Key::Char('j') => { if state.selected_idx < config.entries.len() - 1 { state.selected_idx += 1; } },
+                            libzamak::tui::Key::Edit | libzamak::tui::Key::Char('i') => {
+                                state.editing = !state.editing;
+                                if state.editing {
+                                    state.edit_buffer = alloc::string::String::from(&config.entries[state.selected_idx].cmdline);
+                                }
+                            },
+                            libzamak::tui::Key::Char(c) if state.editing => {
+                                state.edit_buffer.push(c);
+                            },
+                            libzamak::tui::Key::Esc => { if state.editing { state.editing = false; } },
+                            libzamak::tui::Key::Enter    => { 
+                                if state.editing { state.editing = false; } 
+                                else { selected_idx = state.selected_idx; break; }
+                            },
+                            _ => {}
+                        }
+                    }
+                }
+
+                if let Some(entry) = config.entries.get(selected_idx) {
                     info!("Booting entry: {}", entry.name);
                     let kernel_path_str = entry.options.get("KERNEL_PATH")
                         .or(entry.options.get("PATH"))

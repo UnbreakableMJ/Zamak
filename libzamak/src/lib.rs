@@ -7,3 +7,6 @@ extern crate alloc;
 pub mod elf;
 pub mod protocol;
 pub mod config;
+pub mod gfx;
+pub mod font;
+pub mod tui;

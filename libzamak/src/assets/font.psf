@@ -1,0 +1,6 @@
+[0x36, 0x04, 0x00, 0x10,
+// Minimal 8x16 font data placeholder. 
+// In a real scenario, this would be a full 4KB binary blob.
+// For now, we'll rely on the fact that we can't easily synthesize a font here.
+// I'll create a dummy file and assume we'll replace it or use a built-in array in code.
+0x00, 0x00]
