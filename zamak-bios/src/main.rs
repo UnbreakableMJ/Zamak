@@ -39,7 +39,14 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use alloc::vec;
 
-fn fulfill_requests(mmap: &[protocol::MemmapEntry], fb: Option<protocol::Framebuffer>, requests: &[*mut protocol::RawRequest]) {
+fn fulfill_requests(
+    mmap: &[protocol::MemmapEntry], 
+    fb: Option<protocol::Framebuffer>, 
+    kernel_file: Option<*const protocol::File>,
+    modules: &[protocol::File],
+    rsdp: Option<u64>,
+    requests: &[*mut protocol::RawRequest]
+) {
     for &req_ptr in requests {
         let req = unsafe { &mut *req_ptr };
         
@@ -47,7 +54,7 @@ fn fulfill_requests(mmap: &[protocol::MemmapEntry], fb: Option<protocol::Framebu
             protocol::BOOTLOADER_INFO_ID => {
                 let response = Box::leak(Box::new(protocol::BootloaderInfoResponse {
                     name: Box::leak(Box::new("Zamak-Bios\0")).as_ptr() as u64,
-                    version: Box::leak(Box::new("0.3.0\0")).as_ptr() as u64,
+                    version: Box::leak(Box::new("0.5.0\0")).as_ptr() as u64,
                 }));
                 req.response = response as *mut _ as u64;
             }
@@ -75,6 +82,39 @@ fn fulfill_requests(mmap: &[protocol::MemmapEntry], fb: Option<protocol::Framebu
                         revision: 0,
                         framebuffer_count: 1,
                         framebuffers: fb_list.as_ptr() as u64,
+                    }));
+                    req.response = response as *mut _ as u64;
+                }
+            }
+            protocol::RSDP_ID => {
+                if let Some(addr) = rsdp {
+                    let response = Box::leak(Box::new(protocol::RsdpResponse {
+                        revision: 0,
+                        address: addr,
+                    }));
+                    req.response = response as *mut _ as u64;
+                }
+            }
+            protocol::KERNEL_FILE_ID => {
+                if let Some(kf) = kernel_file {
+                    let response = Box::leak(Box::new(protocol::KernelFileResponse {
+                        revision: 0,
+                        kernel_file: kf as u64,
+                    }));
+                    req.response = response as *mut _ as u64;
+                }
+            }
+            protocol::MODULE_ID => {
+                if !modules.is_empty() {
+                    let mut file_ptrs = Vec::new();
+                    for m in modules {
+                        file_ptrs.push(Box::leak(Box::new(*m)) as *const _);
+                    }
+                    let file_list = Box::leak(file_ptrs.into_boxed_slice());
+                    let response = Box::leak(Box::new(protocol::ModuleResponse {
+                        revision: 0,
+                        module_count: file_list.len() as u64,
+                        modules: file_list.as_ptr() as u64,
                     }));
                     req.response = response as *mut _ as u64;
                 }
@@ -118,7 +158,7 @@ pub extern "C" fn kmain(drive_id: u8) -> ! {
     let disk = Disk::new(drive_id);
     unsafe {
         if let Ok(fs) = Fat32::parse(disk, 0) {
-            if let Ok(config_entry) = fs.find_path("/ZAMAK.CON") {
+            if let Ok(config_entry) = fs.find_path("/ZAMAK.CONF") {
                 let mut config_buf = alloc::vec![0u8; config_entry.file_size as usize];
                 if fs.read_file(&config_entry, config_buf.as_mut_ptr()).is_ok() {
                     let config_str = core::str::from_utf8(&config_buf).unwrap_or("");
@@ -152,9 +192,36 @@ pub extern "C" fn kmain(drive_id: u8) -> ! {
                                     
                                     let kernel_size = (kernel_vaddr_end - kernel_vaddr_start) as usize;
                                     
+                                    // Load Modules
+                                    let mut loaded_modules = Vec::new();
+                                    for mod_cfg in &entry.modules {
+                                        if let Ok(m_file) = fs.find_path(&mod_cfg.path) {
+                                            let mut m_buf = alloc::vec![0u8; m_file.file_size as usize];
+                                            if fs.read_file(&m_file, m_buf.as_mut_ptr()).is_ok() {
+                                                let m_leaked = Box::leak(m_buf.into_boxed_slice());
+                                                loaded_modules.push(protocol::File {
+                                                    revision: 0,
+                                                    address: m_leaked.as_ptr() as u64,
+                                                    size: m_leaked.len() as u64,
+                                                    ..Default::default()
+                                                });
+                                            }
+                                        }
+                                    }
+
+                                    // Prepare ACPI/RSDP
+                                    let rsdp = find_rsdp();
+
+                                    // Prepare Kernel File
+                                    let kf_data = Box::leak(kernel_buf.into_boxed_slice());
+                                    let kf = Box::leak(Box::new(protocol::File {
+                                        revision: 0,
+                                        address: kf_data.as_ptr() as u64,
+                                        size: kf_data.len() as u64,
+                                        ..Default::default()
+                                    }));
+
                                     // Scan and fulfill requests in the LOADED kernel
-                                    // The requests are in the physical memory we just copied to
-                                    // We need to scan the segments
                                     let mut all_requests = Vec::new();
                                     for seg in &info.segments {
                                         let seg_ptr = seg.paddr as *const u8;
@@ -163,7 +230,7 @@ pub extern "C" fn kmain(drive_id: u8) -> ! {
                                         all_requests.append(&mut reqs);
                                     }
                                     
-                                    fulfill_requests(&mmap_entries, vbe_fb, &all_requests);
+                                    fulfill_requests(&mmap_entries, vbe_fb, Some(kf), &loaded_modules, rsdp, &all_requests);
 
                                     // Setup Paging
                                     let pml4 = paging::setup_paging(info.segments[0].paddr, kernel_vaddr_start, kernel_size);
@@ -198,3 +265,16 @@ fn panic(_info: &PanicInfo) -> ! {
 
 #[no_mangle]
 pub extern "C" fn rust_eh_personality() {}
+
+pub fn find_rsdp() -> Option<u64> {
+    // Search 0xE0000 to 0xFFFFF
+    let start = 0xE0000 as *const u8;
+    for i in (0..0x20000).step_by(16) {
+        let ptr = unsafe { start.add(i) };
+        let slice = unsafe { core::slice::from_raw_parts(ptr, 8) };
+        if slice == b"RSD PTR " {
+            return Some(ptr as u64);
+        }
+    }
+    None
+}

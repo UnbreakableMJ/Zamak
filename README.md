@@ -41,7 +41,7 @@ This generates `zamak_bios.img`, a 1MB bootable disk image.
 
 ## 📝 Configuration
 
-Zamak looks for a `zamak.con` file on the boot volume. Example configuration:
+Zamak looks for a `zamak.conf` file on the boot volume. Example configuration:
 
 ```ini
 TIMEOUT=5

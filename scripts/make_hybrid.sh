@@ -11,7 +11,7 @@ MBR="mbr.bin"
 STAGE2="stage2.bin"
 UEFI_LOADER="target/x86_64-unknown-uefi/release/zamak-loader.efi"
 KERNEL="BOOT/KERNEL" # Example kernel path
-CONFIG="zamak.con"
+CONFIG="zamak.conf"
 
 echo "--- Building Zamak Hybrid Image ---"
 

@@ -11,12 +11,20 @@ pub struct Config {
     pub entries: Vec<MenuEntry>,
 }
 
+#[derive(Debug, Default, Clone)]
+pub struct ModuleConfig {
+    pub path: String,
+    pub string: String,
+}
+
 #[derive(Debug, Default)]
 pub struct MenuEntry {
     pub name: String,
-    pub level: usize,
-    pub expanded: bool,
+    pub protocol: String,
+    pub kernel_path: String,
+    pub cmdline: String,
     pub options: BTreeMap<String, String>,
+    pub modules: Vec<ModuleConfig>,
 }
 
 pub fn parse(content: &str) -> Config {
@@ -29,48 +37,46 @@ pub fn parse(content: &str) -> Config {
             continue;
         }
 
-        if line.starts_with('/') {
+        if line.starts_with(':') || line.starts_with('/') {
             // New menu entry
             if let Some(entry) = current_entry.take() {
                 config.entries.push(entry);
             }
 
-            let mut level = 0;
-            let mut chars = line.chars();
-            let mut current_char = chars.next();
-            while let Some('/') = current_char {
-                level += 1;
-                current_char = chars.next();
-            }
-
-            let mut name_part = String::new();
-            if let Some(c) = current_char {
-                name_part.push(c);
-            }
-            name_part.push_str(chars.as_str());
-            
-            let name_part = name_part.trim();
-            let mut name = name_part.to_string();
-            let mut expanded = false;
-
-            if name.starts_with('+') {
-                expanded = true;
-                name = name[1..].trim().to_string();
-            }
-
+            let name = line[1..].trim().to_string();
             current_entry = Some(MenuEntry {
                 name,
-                level,
-                expanded,
                 ..Default::default()
             });
-        } else if let Some(colon_idx) = line.find(':') {
-            // Option
-            let key = line[..colon_idx].trim().to_uppercase();
-            let value = line[colon_idx + 1..].trim().to_string();
+        } else {
+            let (key, value) = if let Some(idx) = line.find('=') {
+                (line[..idx].trim().to_uppercase(), line[idx + 1..].trim().to_string())
+            } else if let Some(idx) = line.find(':') {
+                (line[..idx].trim().to_uppercase(), line[idx + 1..].trim().to_string())
+            } else {
+                continue;
+            };
 
             if let Some(ref mut entry) = current_entry {
-                entry.options.insert(key, value);
+                match key.as_str() {
+                    "PROTOCOL" => entry.protocol = value,
+                    "KERNEL_PATH" | "PATH" => entry.kernel_path = value,
+                    "CMDLINE" | "KERNEL_CMDLINE" => entry.cmdline = value,
+                    "MODULE_PATH" => {
+                        entry.modules.push(ModuleConfig {
+                            path: value,
+                            string: String::new(),
+                        });
+                    }
+                    "MODULE_STRING" | "MODULE_CMDLINE" => {
+                        if let Some(last) = entry.modules.last_mut() {
+                            last.string = value;
+                        }
+                    }
+                    _ => {
+                        entry.options.insert(key, value);
+                    }
+                }
             } else {
                 config.global_options.insert(key, value);
             }

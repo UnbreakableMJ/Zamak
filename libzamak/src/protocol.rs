@@ -21,6 +21,10 @@ pub const STACK_SIZE_ID: [u64; 2] = [0x224ef2cd0a8e77b2, 0x321a0293355207c5];
 pub const HHDM_ID: [u64; 2] = [0x48d12d4d805f4581, 0xedc1274043b447b2];
 pub const MEMMAP_ID: [u64; 2] = [0x67cf3d3d3876527d, 0xe30d74b883031260];
 pub const FRAMEBUFFER_ID: [u64; 2] = [0x9d582c31e21b777a, 0x54af621df608145a];
+pub const MODULE_ID: [u64; 2] = [0x3e7e279702ece32d, 0x4dca2a803f2601ee];
+pub const RSDP_ID: [u64; 2] = [0xc5e728f5b803f261, 0x82b2d32e2601dfa5];
+pub const SMBIOS_ID: [u64; 2] = [0x9e3005603972627e, 0x4f6a2a0b3f2601ee];
+pub const KERNEL_FILE_ID: [u64; 2] = [0xad97e30e1e2d777a, 0x24ef2cd0a8e77b21];
 
 #[repr(C)]
 #[derive(Debug)]
@@ -95,6 +99,54 @@ pub struct Framebuffer {
     pub unused: [u8; 7],
     pub edid_size: u64,
     pub edid: u64,
+}
+
+#[repr(C)]
+#[derive(Debug, Default, Clone, Copy)]
+pub struct File {
+    pub revision: u64,
+    pub address: u64,
+    pub size: u64,
+    pub path: u64,
+    pub cmdline: u64,
+    pub media_type: u32,
+    pub unused: u32,
+    pub tftp_ip: u32,
+    pub tftp_port: u32,
+    pub partition_index: u32,
+    pub mbr_disk_id: u32,
+    pub gpt_disk_uuid: [u64; 2],
+    pub gpt_part_uuid: [u64; 2],
+    pub part_uuid: [u64; 2],
+}
+
+#[repr(C)]
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ModuleResponse {
+    pub revision: u64,
+    pub module_count: u64,
+    pub modules: u64, // Pointer to array of pointers to File
+}
+
+#[repr(C)]
+#[derive(Debug, Default, Clone, Copy)]
+pub struct RsdpResponse {
+    pub revision: u64,
+    pub address: u64,
+}
+
+#[repr(C)]
+#[derive(Debug, Default, Clone, Copy)]
+pub struct SmbiosResponse {
+    pub revision: u64,
+    pub address: u64,
+}
+
+#[repr(C)]
+#[derive(Debug, Default, Clone, Copy)]
+pub struct KernelFileResponse {
+    pub revision: u64,
+    pub kernel_file: u64, // Pointer to File
 }
 
 pub fn scan_requests(kernel_bytes: &[u8]) -> Vec<*mut RawRequest> {

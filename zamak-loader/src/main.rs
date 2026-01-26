@@ -140,7 +140,21 @@ fn read_file(file: &mut uefi::proto::media::file::RegularFile) -> Vec<u8> {
     data
 }
 
-fn fulfill_requests(system_table: &SystemTable<Boot>, requests: &[*mut protocol::RawRequest]) {
+fn get_config_table_addr(system_table: &SystemTable<Boot>, guid: uefi::Guid) -> Option<u64> {
+    for entry in system_table.config_table() {
+        if entry.guid == guid {
+            return Some(entry.address as u64);
+        }
+    }
+    None
+}
+
+fn fulfill_requests(
+    system_table: &SystemTable<Boot>, 
+    kernel_file: Option<*const protocol::File>,
+    modules: &[protocol::File],
+    requests: &[*mut protocol::RawRequest]
+) {
     for &req_ptr in requests {
         let req = unsafe { &mut *req_ptr };
         info!("Processing request: ID {:x} {:x}", req.id[0], req.id[1]);
@@ -149,7 +163,7 @@ fn fulfill_requests(system_table: &SystemTable<Boot>, requests: &[*mut protocol:
             protocol::BOOTLOADER_INFO_ID => {
                 let response = Box::leak(Box::new(protocol::BootloaderInfoResponse {
                     name: Box::leak(Box::new("Zamak\0")).as_ptr() as u64,
-                    version: Box::leak(Box::new("0.2.0\0")).as_ptr() as u64,
+                    version: Box::leak(Box::new("0.5.0\0")).as_ptr() as u64,
                 }));
                 req.response = response as *mut _ as u64;
                 info!("  -> Fulfilled BOOTLOADER_INFO");
@@ -236,7 +250,62 @@ fn fulfill_requests(system_table: &SystemTable<Boot>, requests: &[*mut protocol:
                     error!("  -> Failed to locate GOP for FRAMEBUFFER request");
                 }
             }
-            // Further requests will be handled here
+            protocol::RSDP_ID => {
+                let acpi_2_guid = uefi::table::cfg::ACPI2_GUID;
+                let acpi_1_guid = uefi::table::cfg::ACPI_GUID;
+                let addr = get_config_table_addr(system_table, acpi_2_guid)
+                    .or_else(|| get_config_table_addr(system_table, acpi_1_guid));
+                
+                if let Some(a) = addr {
+                    let response = Box::leak(Box::new(protocol::RsdpResponse {
+                        revision: 0,
+                        address: a,
+                    }));
+                    req.response = response as *mut _ as u64;
+                    info!("  -> Fulfilled RSDP");
+                }
+            }
+            protocol::SMBIOS_ID => {
+                let smbios_3_guid = uefi::table::cfg::SMBIOS3_GUID;
+                let smbios_guid = uefi::table::cfg::SMBIOS_GUID;
+                let addr = get_config_table_addr(system_table, smbios_3_guid)
+                    .or_else(|| get_config_table_addr(system_table, smbios_guid));
+                
+                if let Some(a) = addr {
+                    let response = Box::leak(Box::new(protocol::SmbiosResponse {
+                        revision: 0,
+                        address: a,
+                    }));
+                    req.response = response as *mut _ as u64;
+                    info!("  -> Fulfilled SMBIOS");
+                }
+            }
+            protocol::KERNEL_FILE_ID => {
+                if let Some(kf) = kernel_file {
+                    let response = Box::leak(Box::new(protocol::KernelFileResponse {
+                        revision: 0,
+                        kernel_file: kf as u64,
+                    }));
+                    req.response = response as *mut _ as u64;
+                    info!("  -> Fulfilled KERNEL_FILE");
+                }
+            }
+            protocol::MODULE_ID => {
+                if !modules.is_empty() {
+                    let mut file_ptrs = Vec::new();
+                    for m in modules {
+                        file_ptrs.push(Box::leak(Box::new(*m)) as *const _);
+                    }
+                    let file_list = Box::leak(file_ptrs.into_boxed_slice());
+                    let response = Box::leak(Box::new(protocol::ModuleResponse {
+                        revision: 0,
+                        module_count: file_list.len() as u64,
+                        modules: file_list.as_ptr() as u64,
+                    }));
+                    req.response = response as *mut _ as u64;
+                    info!("  -> Fulfilled MODULES ({})", file_list.len());
+                }
+            }
             _ => {
                 info!("  -> Unknown or unhandled request");
             }
@@ -269,8 +338,8 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
 
         // Try to find a configuration file
         let config_paths = [
-            cstr16!("\\zamak.con"),
-            cstr16!("\\boot\\zamak.con"),
+            cstr16!("\\zamak.conf"),
+            cstr16!("\\boot\\zamak.conf"),
         ];
         
         for path in config_paths {
@@ -314,11 +383,52 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                         let relocated_slice = unsafe { core::slice::from_raw_parts(relocated_ptr, loaded_kernel.size) };
                         let relocated_requests = protocol::scan_requests(relocated_slice);
                         
-                        fulfill_requests(&system_table, &relocated_requests);
+                        let mut loaded_modules = Vec::new();
+                        for mod_cfg in &entry.modules {
+                            info!("Loading module: {}", mod_cfg.path);
+                            
+                            // Convert &str to CStr16
+                            let mut mod_path_buf = [0u16; 256];
+                            let mut mi = 0;
+                            for c in mod_cfg.path.chars() {
+                                mod_path_buf[mi] = c as u16;
+                                mi += 1;
+                            }
+                            let u_mod_path = uefi::CStr16::from_u16_with_nul(&mod_path_buf[..mi+1]).expect("Failed to create CStr16 for module");
+
+                            if let Ok(m_handle) = root.open(u_mod_path, FileMode::Read, FileAttribute::empty()) {
+                                let mut m_file = match m_handle.into_type().expect("Failed to get file type") {
+                                    uefi::proto::media::file::FileType::Regular(f) => f,
+                                    _ => continue,
+                                };
+                                let m_data = read_file(&mut m_file);
+                                let m_leaked = Box::leak(m_data.into_boxed_slice());
+                                loaded_modules.push(protocol::File {
+                                    revision: 0,
+                                    address: m_leaked.as_ptr() as u64,
+                                    size: m_leaked.len() as u64,
+                                    ..Default::default()
+                                });
+                                m_file.close();
+                            } else {
+                                error!("Failed to open module: {}", mod_cfg.path);
+                            }
+                        }
+
+                        let kf_data = Box::leak(kernel_data.into_boxed_slice());
+                        let kf = Box::leak(Box::new(protocol::File {
+                            revision: 0,
+                            address: kf_data.as_ptr() as u64,
+                            size: kf_data.len() as u64,
+                            ..Default::default()
+                        }));
+
+                        fulfill_requests(&system_table, Some(kf), &loaded_modules, &relocated_requests);
 
                         let pml4_phys = setup_paging(boot_services, &loaded_kernel);
                         boot_data = Some((pml4_phys, elf_info.entry));
                         
+                        // Close kernel file (m_file already closed in loop)
                         k_file.close();
                     }
                 }
