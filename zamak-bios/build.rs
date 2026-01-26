@@ -43,4 +43,7 @@ fn main() {
 
     println!("cargo:rustc-link-search=native={}", out_dir);
     println!("cargo:rustc-link-lib=static=entry");
+    
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+    println!("cargo:rustc-link-arg=-T{}/linker.ld", manifest_dir);
 }

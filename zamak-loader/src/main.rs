@@ -9,6 +9,7 @@ use uefi::prelude::*;
 use uefi::proto::loaded_image::LoadedImage;
 use uefi::proto::media::fs::SimpleFileSystem;
 use uefi::proto::console::gop::GraphicsOutput;
+use uefi::proto::rng::Rng;
 use uefi::proto::media::file::{File, FileMode, FileAttribute, FileInfo};
 use uefi::table::boot::{AllocateType, MemoryType};
 use log::{info, error};
@@ -18,6 +19,7 @@ use alloc::boxed::Box;
 use libzamak::config;
 use libzamak::elf;
 use libzamak::protocol;
+use libzamak::rng::KaslrRng;
 
 use x86_64::{
     structures::paging::{
@@ -64,6 +66,24 @@ impl<'a> libzamak::tui::InputSource for UefiInput<'a> {
     }
 }
 
+
+struct UefiRng<'a> {
+    boot_services: &'a BootServices,
+}
+
+impl<'a> libzamak::rng::KaslrRng for UefiRng<'a> {
+    fn get_u64(&mut self) -> u64 {
+        if let Ok(handle) = self.boot_services.get_handle_for_protocol::<Rng>() {
+             if let Ok(mut rng) = self.boot_services.open_protocol_exclusive::<Rng>(handle) {
+                 let mut buf = [0u8; 8];
+                 if rng.get_rng(None, &mut buf).is_ok() {
+                     return u64::from_le_bytes(buf);
+                 }
+             }
+        }
+        0
+    }
+}
 
 struct UefiFrameAllocator<'a>(&'a BootServices);
 
@@ -404,7 +424,33 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                 
                 // 2. Initialize graphics for TUI (GOP)
                 let gop_handle = boot_services.get_handle_for_protocol::<GraphicsOutput>().expect("Missing GOP");
-                let mut gop = boot_services.open_protocol_exclusive::<GraphicsOutput>(gop_handle).expect("Failed to open GOP");
+        // Check for LoadFile protocol to detect Network Boot (HTTP/PXE)
+    // Check for network protocols to detect Network environment
+    // SimpleNetwork is standard for PXE/HTTP contexts
+    use uefi::proto::network::snp::SimpleNetwork;
+    use uefi::Identify;
+    
+    // We can't easily check check protocols on the image handle itself for network boot without LoadFile
+    // But we can check if SimpleNetwork is present in the system, implying network support.
+    use uefi::table::boot::SearchType;
+    let is_network_boot = if let Ok(handles) = boot_services.locate_handle_buffer(SearchType::ByProtocol(&SimpleNetwork::GUID)) {
+         !handles.is_empty()
+    } else {
+         false
+    };
+
+    if is_network_boot {
+        log::info!("Boot Source: Network (Protocol Present)");
+    } else {
+        log::info!("Boot Source: Disk / Local Media");
+    }
+
+    // Initialize generic graphics output
+    // locate_protocol is a helper in older/newer uefi-rs. standard way:
+    let gop_handle = boot_services.get_handle_for_protocol::<GraphicsOutput>()
+        .expect("Graphics Output Protocol support is required");
+    let mut gop = boot_services.open_protocol_exclusive::<GraphicsOutput>(gop_handle)
+        .expect("Failed to open GOP");
                 
                 let mut selected_idx = 0;
 
@@ -510,9 +556,30 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                             _ => panic!("Kernel is a directory"),
                         };
                         let kernel_data = read_file(&mut k_file);
-                        let elf_info = elf::parse_elf(&kernel_data).expect("Failed to parse ELF");
+                        let mut elf_info = elf::parse_elf(&kernel_data).expect("Failed to parse ELF");
                         
-                        let loaded_kernel = load_kernel_segments(boot_services, &elf_info, &kernel_data);
+                        let mut loaded_kernel = load_kernel_segments(boot_services, &elf_info, &kernel_data);
+
+                        if elf_info.is_pie {
+                            let mut rng = UefiRng { boot_services };
+                            let random_val = rng.get_u64();
+                            // Base 0xffffffff80000000 + random (0-1GB)
+                            let base = 0xffffffff80000000;
+                            let offset = (random_val % 512) * 0x200000;
+                            
+                            loaded_kernel.vaddr_start = base + offset;
+                            
+                            unsafe {
+                                libzamak::elf::apply_relocations(
+                                    loaded_kernel.phys_base as *mut u8,
+                                    loaded_kernel.vaddr_start,
+                                    &elf_info.relocations
+                                );
+                            }
+                            
+                            elf_info.entry = loaded_kernel.vaddr_start + elf_info.entry;
+                        }
+
                         let relocated_ptr = loaded_kernel.phys_base as *const u8;
                         let relocated_slice = unsafe { core::slice::from_raw_parts(relocated_ptr, loaded_kernel.size) };
                         let relocated_requests = protocol::scan_requests(relocated_slice);

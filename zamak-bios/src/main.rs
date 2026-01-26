@@ -134,20 +134,54 @@ fn fulfill_requests(
     }
 }
 
+use libzamak::rng::KaslrRng;
+
+pub struct BiosRng;
+
+impl KaslrRng for BiosRng {
+    fn get_u64(&mut self) -> u64 {
+        unsafe { core::arch::x86::_rdtsc() }
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn kmain(drive_id: u8) -> ! {
     // 2. Initialize Disk
-    let disk = Disk::new(drive_id);
+    let mut disk = Disk::new(drive_id);
+    let mut disk_ext2 = disk.clone(); 
     
-    // 3. Mount FAT32
-    // We assume the first partition is the boot partition for now
-    let fs = unsafe { Fat32::parse(disk, 0).expect("Failed to mount FAT32") };
+    // 3. Mount Filesystem
+    // We try FAT32 first, then EXT2
+    use libzamak::fs::FileSystem;
+    use libzamak::ext2::Ext2;
+    use crate::fat32::Fat32;
+
+    let mut fs_fat: Option<Fat32> = None;
+    let mut fs_ext2: Option<Ext2> = None;
+    
+    // Probe FAT32
+    if let Ok(f) = Fat32::parse(&mut disk, 0) {
+        fs_fat = Some(f);
+    } 
+    // If not FAT32, probe EXT2
+    else if let Ok(f) = Ext2::mount(&mut disk_ext2, 0) {
+        fs_ext2 = Some(f);
+    } else {
+        panic!("No supported filesystem found on boot partition");
+    }
+
+    let fs: &dyn FileSystem = if let Some(ref f) = fs_fat {
+        f
+    } else {
+        fs_ext2.as_ref().unwrap()
+    };
     
     // Read Config
     let mut config_file_buf = vec![0u8; 4096];
-    let config_entry = unsafe { fs.find_path("zamak.conf").expect("Missing zamak.conf") };
-    unsafe { fs.read_file(&config_entry, config_file_buf.as_mut_ptr()).expect("Failed to read config"); }
-    let config_size = config_entry.file_size as usize;
+    let config_entry = fs.find_file("zamak.conf").expect("Missing zamak.conf");
+    fs.read_file(&config_entry, &mut config_file_buf).expect("Failed to read config");
+    
+    let config_size = config_entry.size as usize;
     // Simple parser
     let config_str = core::str::from_utf8(&config_file_buf[..config_size]).unwrap_or("");
     let config = libzamak::config::parse(config_str);
@@ -160,7 +194,15 @@ pub extern "C" fn kmain(drive_id: u8) -> ! {
     
     let mut selected_idx = 0;
     
+    // Initialize Logging (Serial)
+    // Serial init not available yet, skipping.
+    
+    // Check for Network Boot (Stub)
+    // Real PXE detection would check for !PXE structure in memory (0x0000-0xFFFF)
+    // or generic Int 18h behavior. For now we assume Disk boot unless specified.
+    // log::info!("Network Boot: Not Supported (Stub)");
     if let Some(mut fb) = fb_opt {
+
         // TUI Loop
         use libzamak::tui::{MenuState, draw_menu, Key, InputSource};
         use libzamak::font::{PsfFont, DEFAULT_FONT};
@@ -246,9 +288,9 @@ pub extern "C" fn kmain(drive_id: u8) -> ! {
     let kernel_path = &selected_entry.kernel_path;
 
     // Load Kernel File
-    let kernel_entry = unsafe { fs.find_path(kernel_path).expect("Kernel not found") };
-    let mut kernel_buf = vec![0u8; kernel_entry.file_size as usize];
-    unsafe { fs.read_file(&kernel_entry, kernel_buf.as_mut_ptr()).expect("Failed to read kernel"); }
+    let kernel_entry = fs.find_file(kernel_path).expect("Kernel not found");
+    let mut kernel_buf = vec![0u8; kernel_entry.size as usize];
+    fs.read_file(&kernel_entry, &mut kernel_buf).expect("Failed to read kernel");
 
     // Load Modules
     let loaded_modules = Vec::new();
@@ -262,12 +304,34 @@ pub extern "C" fn kmain(drive_id: u8) -> ! {
     }
     
     // Parse ELF
+    // Parse ELF
     let current_video_mode = fb_opt; // Pass the active VBE mode
-    let info = libzamak::elf::parse_elf(&kernel_buf).expect("Invalid ELF kernel");
+    let mut info = libzamak::elf::parse_elf(&kernel_buf).expect("Invalid ELF kernel");
 
     // Gather Memory Map
     let mmap_entries = get_memory_map();
-    let kernel_vaddr_start = 0xffffffff80000000;
+    
+    let mut kernel_vaddr_start = 0xffffffff80000000;
+    
+    if info.is_pie {
+        let mut rng = BiosRng;
+        // Limit randomness to avoid mapping conflicts or OOM
+        // 0 to 256 * 2MB = 512MB variance
+        let offset = (rng.get_u64() % 256) * 0x200000;
+        kernel_vaddr_start += offset;
+        
+        unsafe {
+            libzamak::elf::apply_relocations(
+                kernel_buf.as_mut_ptr(),
+                kernel_vaddr_start,
+                &info.relocations
+            );
+        }
+        
+        // Adjust entry point if it's relative
+        info.entry = kernel_vaddr_start + info.entry;
+    }
+    
     let kernel_size = kernel_buf.len();
 
     // Prepare ACPI/RSDP
