@@ -7,12 +7,13 @@
 
 ## 🚀 Features
 
-- **Dual-Mode Booting**: Seamless support for modern UEFI firmware and Legacy BIOS (MBR).
-- **Limine Protocol**: Implements the Limine boot protocol, providing kernels with memory maps, resolution-aware framebuffers, and Higher Half Direct Mapping (HHDM).
-- **Rust Powered**: Leverage Rust's safety and modern tooling for low-level systems code.
+- **Dual-Mode Booting**: Seamless support for modern UEFI firmware and Legacy BIOS (MBR), including a hybrid boot image capability.
+- **Symmetric Multiprocessing (SMP)**: Full implementation of the Limine SMP protocol. Discovery of secondary cores (APs) via MADT (BIOS) or MP Services (UEFI) and transitioning them to 64-bit Long Mode.
+- **Limine Protocol**: Implements the Limine boot protocol, providing kernels with memory maps, resolution-aware framebuffers, ACPI/SMBIOS pointers, and Higher Half Direct Mapping (HHDM).
+- **Module Support**: Load auxiliary files (like initramfs) from disk and pass them to the kernel.
 - **FAT32 Support**: Built-in read-only FAT32 driver for locating kernels and configuration files across directory hierarchies.
-- **ELF64 Loader**: Robust parsing and loading of 64-bit ELF kernel segments.
-- **Long Mode Handover**: Automated transition from 32-bit (BIOS) or UEFI environments to 64-bit Long Mode with paging enabled.
+- **ELF64 Loader**: Robust parsing and loading of 64-bit ELF kernel segments with protocol fulfillment directly in the loaded image.
+- **Rust Powered**: Leverage Rust's safety and modern tooling for low-level systems code, moving towards a "pure Rust" implementation.
 
 ## 📂 Project Structure
 
