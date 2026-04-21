@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Mohamed Hammad
 
 #![no_std]
 #![no_main]
 
 extern crate alloc;
 
+pub mod entry;
+pub mod mbr;
+pub mod trampoline;
 pub mod disk;
 pub mod fat32;
 pub mod allocator;
@@ -36,7 +40,18 @@ extern "C" {
     fn enter_long_mode(pml4_phys: u32, entry_point: u64);
 }
 
-use libzamak::protocol;
+// §3.9.7: Compile-time layout verification for structs accessed by assembly.
+const _: () = {
+    assert!(core::mem::size_of::<BiosRegs>() == 24, "BiosRegs must be 24 bytes");
+    assert!(core::mem::offset_of!(BiosRegs, eax) == 0, "BiosRegs.eax at offset 0");
+    assert!(core::mem::offset_of!(BiosRegs, ebx) == 4, "BiosRegs.ebx at offset 4");
+    assert!(core::mem::offset_of!(BiosRegs, ecx) == 8, "BiosRegs.ecx at offset 8");
+    assert!(core::mem::offset_of!(BiosRegs, edx) == 12, "BiosRegs.edx at offset 12");
+    assert!(core::mem::offset_of!(BiosRegs, esi) == 16, "BiosRegs.esi at offset 16");
+    assert!(core::mem::offset_of!(BiosRegs, edi) == 20, "BiosRegs.edi at offset 20");
+};
+
+use zamak_core::protocol;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use alloc::vec;
@@ -52,6 +67,8 @@ fn fulfill_requests(
     requests: &[*mut protocol::RawRequest]
 ) {
     for &req_ptr in requests {
+        // SAFETY: req_ptr was found by scan_requests in kernel memory; it points
+        //         to a valid RawRequest with the Limine magic header intact.
         let req = unsafe { &mut *req_ptr };
         
         match req.id {
@@ -134,15 +151,8 @@ fn fulfill_requests(
     }
 }
 
-use libzamak::rng::KaslrRng;
-
-pub struct BiosRng;
-
-impl KaslrRng for BiosRng {
-    fn get_u64(&mut self) -> u64 {
-        unsafe { core::arch::x86::_rdtsc() }
-    }
-}
+use zamak_core::arch::x86 as arch;
+use zamak_core::rng::{KaslrRng, X86KaslrRng};
 
 #[no_mangle]
 pub extern "C" fn kmain(drive_id: u8) -> ! {
@@ -152,8 +162,8 @@ pub extern "C" fn kmain(drive_id: u8) -> ! {
     
     // 3. Mount Filesystem
     // We try FAT32 first, then EXT2
-    use libzamak::fs::FileSystem;
-    use libzamak::ext2::Ext2;
+    use zamak_core::fs::FileSystem;
+    use zamak_core::ext2::Ext2;
     use crate::fat32::Fat32;
 
     let mut fs_fat: Option<Fat32> = None;
@@ -184,7 +194,7 @@ pub extern "C" fn kmain(drive_id: u8) -> ! {
     let config_size = config_entry.size as usize;
     // Simple parser
     let config_str = core::str::from_utf8(&config_file_buf[..config_size]).unwrap_or("");
-    let config = libzamak::config::parse(config_str);
+    let config = zamak_core::config::parse(config_str);
 
     // 4. Initialize Graphics (VBE) for TUI
     let mut fb_opt = vbe::find_and_set_vbe_mode(1024, 768, 32); 
@@ -204,21 +214,29 @@ pub extern "C" fn kmain(drive_id: u8) -> ! {
     if let Some(mut fb) = fb_opt {
 
         // TUI Loop
-        use libzamak::tui::{MenuState, draw_menu, Key, InputSource};
-        use libzamak::font::{PsfFont, DEFAULT_FONT};
-        use libzamak::gfx::Canvas;
+        use zamak_core::tui::{MenuState, draw_menu, Key, InputSource};
+        use zamak_core::font::{PsfFont, DEFAULT_FONT};
+        use zamak_core::gfx::Canvas;
+        use zamak_theme::{Theme, ThemeVariant};
         use crate::input::BiosInput;
 
         let font = PsfFont::parse(DEFAULT_FONT).unwrap();
         let mut canvas = Canvas::new(&mut fb);
         let mut input = BiosInput;
-        
-        let mut state = MenuState::new(config.timeout); 
+
+        let theme_variant = ThemeVariant::parse(&config.theme_variant);
+        let theme = Theme::default().with_variant(theme_variant);
+
+        let mut state = if config.config_hash.is_some() {
+            MenuState::new_locked(config.timeout)
+        } else {
+            MenuState::new(config.timeout)
+        };
         let mut time_remaining = config.timeout * 10;
-        
+
         loop {
             // Draw
-            draw_menu(&mut canvas, &font, &config, &state, time_remaining);
+            draw_menu(&mut canvas, &font, &config, &state, &theme, time_remaining);
             
             // Poll Input
             let key = input.read_key();
@@ -271,14 +289,14 @@ pub extern "C" fn kmain(drive_id: u8) -> ! {
             // Timeout logic
             if time_remaining > 0 {
                 // simple wait
-                for _ in 0..5000000 { unsafe { core::arch::asm!("pause"); } }
+                arch::spin_wait(5_000_000);
                 time_remaining -= 1;
                 if time_remaining == 0 {
                     break; 
                 }
             } else {
                  // Fast poll UI
-                 for _ in 0..100000 { unsafe { core::arch::asm!("pause"); } }
+                 arch::spin_wait(100_000);
             }
         }
     }
@@ -306,7 +324,7 @@ pub extern "C" fn kmain(drive_id: u8) -> ! {
     // Parse ELF
     // Parse ELF
     let current_video_mode = fb_opt; // Pass the active VBE mode
-    let mut info = libzamak::elf::parse_elf(&kernel_buf).expect("Invalid ELF kernel");
+    let mut info = zamak_core::elf::parse_elf(&kernel_buf).expect("Invalid ELF kernel");
 
     // Gather Memory Map
     let mmap_entries = get_memory_map();
@@ -314,14 +332,19 @@ pub extern "C" fn kmain(drive_id: u8) -> ! {
     let mut kernel_vaddr_start = 0xffffffff80000000;
     
     if info.is_pie {
-        let mut rng = BiosRng;
+        let mut rng = X86KaslrRng::new();
         // Limit randomness to avoid mapping conflicts or OOM
         // 0 to 256 * 2MB = 512MB variance
         let offset = (rng.get_u64() % 256) * 0x200000;
         kernel_vaddr_start += offset;
         
+        // SAFETY:
+        //   Preconditions: kernel_buf contains a valid PIE ELF with relocations
+        //   Postconditions: all relocations adjusted to kernel_vaddr_start base
+        //   Clobbers: kernel_buf contents (in-place patching)
+        //   Worst-case: corrupted kernel if relocations are invalid
         unsafe {
-            libzamak::elf::apply_relocations(
+            zamak_core::elf::apply_relocations(
                 kernel_buf.as_mut_ptr(),
                 kernel_vaddr_start,
                 &info.relocations
@@ -341,7 +364,7 @@ pub extern "C" fn kmain(drive_id: u8) -> ! {
     let mut smp_response = None;
     if let Some(rsdp_addr) = rsdp {
         let (lapic_addr, cpus) = smp::parse_madt(rsdp_addr);
-        let pml4 = paging::setup_paging(info.segments[0].paddr, kernel_vaddr_start, kernel_size);
+        let pml4 = paging::setup_paging(info.segments[0].paddr, kernel_vaddr_start, kernel_size, &mmap_entries);
         let smp_list = smp::start_aps(lapic_addr, &cpus, pml4.as_u64());
         
         let mut smp_info_ptrs = Vec::new();
@@ -353,7 +376,15 @@ pub extern "C" fn kmain(drive_id: u8) -> ! {
         smp_response = Some(protocol::SmpResponse {
             revision: 0,
             flags: 0,
-            bsp_lapic_id: unsafe { *((lapic_addr + 0x20) as *const u32) >> 24 } as u32,
+            // SAFETY: lapic_addr is the LAPIC MMIO base from MADT; ID register at +0x20.
+            // LAPIC ID reg is a well-known MMIO offset; we use checked_add
+            // to make the overflow impossibility explicit (RG-3).
+            bsp_lapic_id: unsafe {
+                let id_reg = lapic_addr
+                    .checked_add(0x20)
+                    .expect("LAPIC base + 0x20 overflowed u64") as *const u32;
+                *id_reg >> 24
+            } as u32,
             cpu_count: smp_ptr.len() as u64,
             cpus: smp_ptr.as_ptr() as u64,
         });
@@ -374,6 +405,7 @@ pub extern "C" fn kmain(drive_id: u8) -> ! {
     let mut all_requests = Vec::new();
     for seg in &info.segments {
         let seg_ptr = seg.paddr as *const u8;
+        // SAFETY: seg.paddr was set by the ELF loader; seg.mem_size is the segment size.
         let seg_slice = unsafe { core::slice::from_raw_parts(seg_ptr, seg.mem_size as usize) };
         let mut reqs = protocol::scan_requests(seg_slice);
         all_requests.append(&mut reqs);
@@ -382,9 +414,14 @@ pub extern "C" fn kmain(drive_id: u8) -> ! {
     fulfill_requests(&mmap_entries, current_video_mode, Some(kf), &loaded_modules, rsdp, smp_response, &all_requests);
 
     // Setup Paging
-    let pml4 = paging::setup_paging(info.segments[0].paddr, kernel_vaddr_start, kernel_size);
+    let pml4 = paging::setup_paging(info.segments[0].paddr, kernel_vaddr_start, kernel_size, &mmap_entries);
     
     // Enter Long Mode
+    // SAFETY:
+    //   Preconditions: pml4 is a valid PML4 page table; info.entry is the kernel entry point
+    //   Postconditions: CPU transitions to 64-bit long mode and jumps to kernel; never returns
+    //   Clobbers: all registers (mode transition)
+    //   Worst-case: triple fault if page tables are invalid or entry point is wrong
     unsafe { enter_long_mode(pml4.as_u64() as u32, info.entry); }
     
     loop {}
@@ -392,6 +429,8 @@ pub extern "C" fn kmain(drive_id: u8) -> ! {
 
 fn println(vga: *mut u8, line: isize, msg: &str, color: u8) {
     for (i, &byte) in msg.as_bytes().iter().enumerate() {
+        // SAFETY: vga points to 0xB8000 VGA text buffer (80x25x2 = 4000 bytes);
+        //         line*80+i must be within bounds for this to be valid.
         unsafe {
             *vga.offset((line * 80 + i as isize) * 2) = byte;
             *vga.offset((line * 80 + i as isize) * 2 + 1) = color;
@@ -411,6 +450,7 @@ pub fn find_rsdp() -> Option<u64> {
     // Search 0xE0000 to 0xFFFFF
     let start = 0xE0000 as *const u8;
     for i in (0..0x20000).step_by(16) {
+        // SAFETY: BIOS RSDP resides in 0xE0000..0xFFFFF; reading 8 bytes for signature.
         let ptr = unsafe { start.add(i) };
         let slice = unsafe { core::slice::from_raw_parts(ptr, 8) };
         if slice == b"RSD PTR " {

@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+[package]
+name = "zamak-decompressor"
+version = "0.1.0"
+edition = "2021"
+description = "BIOS stage2 decompressor — inflates zamak-bios.sys to a fixed physical address"
+license = "GPL-3.0-or-later"
+
+[[bin]]
+name = "zamak-decompressor"
+path = "src/main.rs"
+
+[dependencies]
+miniz_oxide = { version = "0.8", default-features = false, features = ["with-alloc"] }

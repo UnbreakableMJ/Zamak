@@ -13,6 +13,11 @@ target/
 # Antigravity/Internal
 .gemini/
 
+# Claude Code session state + exported transcripts
+.claude/
+Chat.txt
+2026-*-this-session-is-being-continued-from-a-previous-c.txt
+
 # IDEs
 .vscode/
 .idea/

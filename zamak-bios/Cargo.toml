@@ -1,10 +1,13 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 [package]
 name = "zamak-bios"
 version = "0.6.9"
 edition = "2021"
 
 [dependencies]
-libzamak = { path = "../libzamak" }
+zamak-core = { path = "../zamak-core" }
+zamak-theme = { path = "../zamak-theme" }
 log = "0.4"
 x86_64 = { version = "0.15", default-features = false, features = ["instructions"] }
 limine-protocol = "0.5"

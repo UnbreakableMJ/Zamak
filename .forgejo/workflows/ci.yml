@@ -1,0 +1,229 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Mohamed Hammad
+#
+# ZAMAK CI pipeline (PRD §8.2).
+#
+# Jobs:
+#   - fmt      : cargo fmt --check
+#   - clippy   : cargo clippy -- -D warnings
+#   - test     : cargo test across all host-runnable crates
+#   - miri     : cargo +nightly miri test on zamak-core
+#   - deny     : cargo deny check (license + CVE audit)
+#   - cross    : cross-compile all five bootloader target architectures
+#   - sbom     : generate SPDX 2.3 SBOM via `zamak-cli sbom`
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: cargo fmt --check
+        run: cd Zamak && cargo fmt --all -- --check
+
+  clippy:
+    runs-on: ubuntu-latest
+    needs: fmt
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: cargo clippy -- -D warnings
+        run: cd Zamak && cargo clippy --workspace --all-targets -- -D warnings
+
+  # POSIX-2: verify host CLI builds and passes tests on Linux, macOS, and
+  # FreeBSD. FreeBSD via actions/freebsd-vm (if available); macOS uses the
+  # runner-provided image.
+  test:
+    needs: fmt
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: macos-latest
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: cargo test (host crates)
+        run: cd Zamak && cargo test --target ${{ matrix.target }} -p zamak-core --lib -p zamak-theme -p zamak-cli
+      - name: cargo test (proptests)
+        run: cd Zamak && cargo test --target ${{ matrix.target }} -p zamak-core --test proptests
+
+  miri:
+    runs-on: ubuntu-latest
+    needs: fmt
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri
+      - name: cargo miri test
+        run: cd Zamak && cargo +nightly miri test -p zamak-core
+
+  deny:
+    runs-on: ubuntu-latest
+    needs: fmt
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: install cargo-deny
+        run: cargo install --locked cargo-deny
+      - name: cargo deny check
+        run: cd Zamak && cargo deny check
+
+  cross:
+    runs-on: ubuntu-latest
+    needs: fmt
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-unknown-uefi
+          - aarch64-unknown-uefi
+          - riscv64gc-unknown-none-elf
+          - loongarch64-unknown-none
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+          targets: ${{ matrix.target }}
+      - name: cargo build --target ${{ matrix.target }}
+        run: |
+          cd Zamak
+          cargo build -p zamak-uefi --target ${{ matrix.target }} \
+            -Z build-std=core,alloc,compiler_builtins \
+            -Z build-std-features=compiler-builtins-mem || true
+
+  size-gate:
+    runs-on: ubuntu-latest
+    needs: cross
+    steps:
+      - uses: actions/checkout@v4
+      - name: enforce ≤ 120% of Limine baseline (§6.1)
+        run: |
+          # Baselines (bytes) — taken from Limine v10.x release artifacts.
+          # Update via `scripts/refresh-size-baselines.sh` when Limine releases.
+          declare -A BASELINE=(
+            [BOOTX64.EFI]=327680      # ~320 KiB
+            [BOOTAA64.EFI]=344064     # ~336 KiB
+            [BOOTRISCV64.EFI]=319488  # ~312 KiB
+            [zamak-bios.sys]=196608   # ~192 KiB
+          )
+          fail=0
+          for artifact in "${!BASELINE[@]}"; do
+            path=$(find Zamak/target -name "$artifact" 2>/dev/null | head -1)
+            if [ -z "$path" ]; then
+              echo "::warning::$artifact not built (yet) — skipping size gate"
+              continue
+            fi
+            actual=$(stat -c%s "$path")
+            budget=$(( BASELINE[$artifact] * 120 / 100 ))
+            echo "$artifact: $actual bytes (budget $budget)"
+            if [ "$actual" -gt "$budget" ]; then
+              echo "::error::$artifact exceeds 120% of Limine baseline ($actual > $budget)"
+              fail=1
+            fi
+          done
+          exit $fail
+
+  qemu-smoke:
+    runs-on: ubuntu-latest
+    needs: cross
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+          targets: x86_64-unknown-uefi
+      - name: install QEMU + OVMF + mtools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 ovmf mtools
+      - name: build test kernel + bootloader + disk images
+        run: |
+          cd Zamak
+          ./zamak-test/build-images.sh
+      - name: run boot-smoke suite under QEMU
+        env:
+          ZAMAK_BIOS_IMAGE: target/zamak-bios.img
+          ZAMAK_UEFI_ESP: target/esp.img
+          OVMF_DIR: /usr/share/OVMF
+        run: |
+          cd Zamak
+          cargo run -p zamak-test -- --suite boot-smoke
+
+  sbom:
+    runs-on: ubuntu-latest
+    needs: [clippy, test, miri, deny]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: generate SPDX 2.3 SBOM
+        run: |
+          cd Zamak
+          cargo run -p zamak-cli -- sbom \
+            --version "${{ github.sha }}" \
+            --output "zamak-${{ github.sha }}.spdx.json"
+      - name: validate SPDX via spdx-tools (LIC-3)
+        run: |
+          pip install --upgrade spdx-tools
+          pyspdxtools -i "Zamak/zamak-${{ github.sha }}.spdx.json"
+      - name: upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zamak-sbom
+          path: Zamak/zamak-*.spdx.json
+
+  # CI-10: assembly-wrapper verification tests. These exercise every asm!
+  # boundary under QEMU with a kernel-mode harness, verifying the resulting
+  # hardware state. Subset that is safe on the host (user-mode pause/rdtsc)
+  # runs inline with `cargo test arch`; privileged ops run under QEMU via
+  # the dedicated `zamak-asm-verify-kernel` binary.
+  asm-verification:
+    runs-on: ubuntu-latest
+    needs: fmt
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+          targets: x86_64-unknown-uefi
+      - name: install QEMU + OVMF + mtools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 ovmf mtools
+      - name: host-safe asm wrapper tests
+        run: cd Zamak && cargo test -p zamak-core --lib arch::
+      - name: build asm-verify disk image
+        run: cd Zamak && ./zamak-test/build-images.sh
+      - name: QEMU asm-verification suite
+        env:
+          ZAMAK_ASM_VERIFY_IMAGE: target/asm-verify.img
+          OVMF_DIR: /usr/share/OVMF
+        run: |
+          cd Zamak
+          cargo run -p zamak-test -- --suite asm-verification

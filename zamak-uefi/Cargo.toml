@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+[package]
+name = "zamak-uefi"
+version = "0.6.9"
+edition = "2021"
+
+[dependencies]
+uefi = "0.24"
+uefi-services = "0.21"
+limine-protocol = "0.5"
+zamak-core = { path = "../zamak-core" }
+zamak-theme = { path = "../zamak-theme" }
+log = "0.4"
+
+# x86-specific crate — only depend on it when we actually target x86-64 so
+# the AArch64 / RISC-V / LoongArch builds don't try to compile it.
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+x86_64 = { version = "0.15", default-features = false, features = ["instructions"] }

@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Mohamed Hammad
+
+CARGO = cargo +nightly
+TARGET = x86_64-unknown-uefi
+UEFI_DIR = zamak-uefi
+OUT_DIR = target/$(TARGET)/release
+
+# Final artifact name per UEFI specification.
+ARTIFACT = BOOTX64.EFI
+
+all: $(ARTIFACT)
+
+$(ARTIFACT):
+	cd $(UEFI_DIR) && $(CARGO) build -Zbuild-std=core,alloc --target $(TARGET) --release
+	cp $(OUT_DIR)/zamak-uefi.efi $(ARTIFACT)
+
+# Build a FAT32 EFI System Partition image for QEMU testing.
+# Creates a 64 MiB image with EFI/BOOT/BOOTX64.EFI.
+esp.img: $(ARTIFACT)
+	dd if=/dev/zero of=esp.img bs=1M count=64 2>/dev/null
+	mkfs.fat -F 32 esp.img
+	mmd -i esp.img ::/EFI
+	mmd -i esp.img ::/EFI/BOOT
+	mcopy -i esp.img $(ARTIFACT) ::/EFI/BOOT/BOOTX64.EFI
+
+# Run under QEMU with OVMF firmware.
+# Requires: OVMF_CODE.fd and OVMF_VARS.fd (or set OVMF_DIR).
+OVMF_DIR ?= /usr/share/OVMF
+qemu: esp.img
+	qemu-system-x86_64 \
+		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_DIR)/OVMF_CODE.fd \
+		-drive if=pflash,format=raw,file=$(OVMF_DIR)/OVMF_VARS.fd \
+		-drive format=raw,file=esp.img \
+		-net none \
+		-serial stdio \
+		-m 256M
+
+clean:
+	rm -f $(ARTIFACT) esp.img
+	cd $(UEFI_DIR) && $(CARGO) clean
+
+.PHONY: all clean qemu

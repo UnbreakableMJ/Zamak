@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Mohamed Hammad
 
 use crate::{BiosRegs, call_bios_int};
-use libzamak::protocol::Framebuffer;
+use zamak_core::protocol::Framebuffer;
 
 #[repr(C, packed)]
 pub struct VbeInfoBlock {

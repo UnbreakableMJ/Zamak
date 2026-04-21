@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Mohamed Hammad
 
 # Zamak Hybrid Image Generator
 # Creates a GPT disk image bootable via UEFI and BIOS
@@ -9,7 +11,7 @@ IMG="zamak_hybrid.img"
 SZ=64M
 MBR="mbr.bin"
 STAGE2="stage2.bin"
-UEFI_LOADER="target/x86_64-unknown-uefi/release/zamak-loader.efi"
+UEFI_LOADER="target/x86_64-unknown-uefi/release/zamak-uefi.efi"
 KERNEL="BOOT/KERNEL" # Example kernel path
 CONFIG="zamak.conf"
 

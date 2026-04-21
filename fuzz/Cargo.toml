@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Mohamed Hammad
+
+[package]
+name = "zamak-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+zamak-core = { path = "../zamak-core" }
+
+# Required by cargo-fuzz: every harness is its own [[bin]].
+[[bin]]
+name = "config_parser"
+path = "fuzz_targets/config_parser.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "uri_parser"
+path = "fuzz_targets/uri_parser.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "multiboot_header"
+path = "fuzz_targets/multiboot_header.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "bmp_parser"
+path = "fuzz_targets/bmp_parser.rs"
+test = false
+doc = false
+
+# TEST-6: differential fuzz — zamak's config parser vs. a hand-rolled
+# Limine v10.x reference model that encodes the clean-subset of the
+# spec.
+[[bin]]
+name = "config_parser_differential"
+path = "fuzz_targets/config_parser_differential.rs"
+test = false
+doc = false
+
+[workspace]
+# Empty — this crate stands apart from the main workspace so
+# `cargo fuzz` can use a nightly toolchain independently.

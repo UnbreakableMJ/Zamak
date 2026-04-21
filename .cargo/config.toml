@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Mohamed Hammad
+
+# Miri configuration (PRD §3.9.10).
+#
+# Miri cannot interpret inline assembly. ZAMAK works around this by stubbing
+# out every `asm!` block with a `#[cfg(miri)]` alternative that returns
+# deterministic values. To run the Miri test suite:
+#
+#     cargo +nightly miri test -p zamak-core
+#
+# These flags:
+#   - `-Zmiri-ignore-leaks` : Let `static` data (like `ZAMAK_ENROLLED_HASH`)
+#     live for the entire program; Miri otherwise reports them as leaks.
+#   - `-Zmiri-symbolic-alignment-check` : Stricter alignment checks. Catches
+#     mistakes where we dereference a raw pointer that isn't aligned.
+#   - `-Zmiri-disable-isolation` : Allows clock queries and env var reads
+#     that Miri normally blocks; needed for config discovery tests.
+[env]
+MIRIFLAGS = "-Zmiri-ignore-leaks -Zmiri-symbolic-alignment-check -Zmiri-disable-isolation"
+
+# Alias so `cargo miri-test` runs the standard ZAMAK Miri suite.
+[alias]
+miri-test = "+nightly miri test -p zamak-core --lib"

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Mohamed Hammad
 
-use libzamak::fs::{FileSystem, BlockDevice, FileEntry, FileType, Error};
+use zamak_core::fs::{FileSystem, BlockDevice, FileEntry, FileType, Error};
 use alloc::vec::Vec;
 use alloc::vec;
 use alloc::string::String;

@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+[target.i686-zamak-decompressor]
+linker = "rust-lld"
+rustflags = [
+    "-C", "link-arg=-Tzamak-decompressor/linker.ld",
+    "-C", "link-arg=--oformat=elf32-i386",
+]
+
+[build]
+target = "i686-zamak-decompressor.json"

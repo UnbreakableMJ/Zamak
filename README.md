@@ -17,9 +17,9 @@
 
 ## 📂 Project Structure
 
-- `zamak-loader/`: The UEFI entry point (`zamak.efi`).
+- `zamak-uefi/`: The UEFI entry point (`zamak.efi`).
 - `zamak-bios/`: The BIOS-specific Stage 1 (MBR) and Stage 2 (Rust) loaders.
-- `libzamak/`: Shared `no_std` library for protocol handling, ELF parsing, and configuration logic.
+- `zamak-core/`: Shared `no_std` library for protocol handling, ELF parsing, and configuration logic.
 
 ## 🛠 Building
 
@@ -31,7 +31,7 @@
 
 ### Build UEFI Loader
 ```bash
-cargo build -p zamak-loader --release
+cargo build -p zamak-uefi --release
 ```
 
 ### Build BIOS Image

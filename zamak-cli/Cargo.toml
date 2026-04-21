@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+[package]
+name = "zamak-cli"
+version = "0.1.0"
+edition = "2021"
+description = "Host-side CLI tool for ZAMAK bootloader (MBR install, config enrollment, SBOM)"
+license = "GPL-3.0-or-later"
+
+[[bin]]
+name = "zamak"
+path = "src/main.rs"
+
+[features]
+default = []
+tui = ["dep:ratatui", "dep:crossterm"]
+
+[dependencies]
+ratatui = { version = "0.29", optional = true, default-features = false, features = ["crossterm"] }
+crossterm = { version = "0.28", optional = true }

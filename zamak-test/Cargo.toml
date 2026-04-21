@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+[package]
+name = "zamak-test"
+version = "0.6.9"
+edition = "2021"
+description = "QEMU integration test harness for the ZAMAK bootloader"
+
+[[bin]]
+name = "zamak-test"
+path = "src/main.rs"
+
+[dependencies]

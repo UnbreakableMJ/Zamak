@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+[package]
+name = "zamak-core"
+version = "0.6.9"
+edition = "2021"
+
+[dependencies]
+zamak-proto = { path = "../zamak-proto" }
+zamak-macros = { path = "../zamak-macros" }
+zamak-theme = { path = "../zamak-theme" }
+limine-protocol = "0.5"
+goblin = { version = "0.7", default-features = false, features = ["elf64", "elf32", "endian_fd", "alloc"] }
+
+[dev-dependencies]
+proptest = "1"

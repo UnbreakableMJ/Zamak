@@ -25,6 +25,14 @@ SECTIONS
         *(COMMON)
     }
 
+    .trampoline : {
+        KEEP(*(.trampoline))
+    }
+
+    .mbr : {
+        KEEP(*(.mbr))
+    }
+
     /DISCARD/ : {
         *(.eh_frame)
         *(.comment)

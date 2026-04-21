@@ -1,9 +1,23 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 [workspace]
 members = [
-    "zamak-loader",
-    "libzamak",
+    "zamak-stage1",
+    "zamak-uefi",
+    "zamak-core",
     "zamak-bios",
+    "zamak-decompressor",
+    "zamak-proto",
+    "zamak-theme",
+    "zamak-cli",
+    "zamak-test",
+    "zamak-macros",
 ]
+# zamak-test-kernel is excluded from the workspace so its own
+# .cargo/config.toml (with `build-std`) can apply without the workspace's
+# stable-toolchain alias interfering. Build it explicitly with:
+#     cargo +nightly build --manifest-path zamak-test-kernel/Cargo.toml --release
+exclude = ["zamak-test-kernel"]
 resolver = "2"
 
 [profile.dev]

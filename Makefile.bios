@@ -1,29 +1,46 @@
-NASM = nasm
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Mohamed Hammad
+
 CARGO = cargo +nightly
 OBJCOPY = objcopy
 
-STAGE1_SRC = zamak-bios/stage1/mbr.asm
-STAGE2_DIR = zamak-bios
-TARGET_JSON = i686-zamak.json
+STAGE1_DIR = zamak-stage1
+STAGE2_DIR = zamak-decompressor
+STAGE3_DIR = zamak-bios
+STAGE1_TARGET_JSON = i686-zamak-stage1.json
+STAGE2_TARGET_JSON = i686-zamak-decompressor.json
+STAGE3_TARGET_JSON = i686-zamak.json
 IMAGE = zamak_bios.img
 
-all: trampoline.bin $(IMAGE)
+all: $(IMAGE)
 
-trampoline.bin: zamak-bios/stage1/trampoline.asm
-	$(NASM) -f bin zamak-bios/stage1/trampoline.asm -o trampoline.bin
-
+# Final image: MBR (512 bytes) + stage2 (decompressor) at sector 1+
 $(IMAGE): mbr.bin stage2.bin
-	cat mbr.bin stage2.bin > $(IMAGE)
-	# Pad to some size if needed
+	cp mbr.bin $(IMAGE)
 	truncate -s 1M $(IMAGE)
+	dd if=stage2.bin of=$(IMAGE) bs=512 seek=1 conv=notrunc 2>/dev/null
 
-mbr.bin: $(STAGE1_SRC)
-	$(NASM) -f bin $(STAGE1_SRC) -o mbr.bin
+# Stage 1: 512-byte MBR boot sector (zamak-stage1, pure global_asm!)
+mbr.bin:
+	cd $(STAGE1_DIR) && $(CARGO) build -Zbuild-std=core --target $(STAGE1_TARGET_JSON) --release
+	$(OBJCOPY) -O binary target/i686-zamak-stage1/release/zamak-stage1 mbr.bin
 
-stage2.bin:
-	cd $(STAGE2_DIR) && $(CARGO) build -Zbuild-std=core,alloc --target $(TARGET_JSON) --release
-	$(OBJCOPY) -O binary target/i686-zamak/release/zamak-bios stage2.bin
+# Stage 3: full bootloader (zamak-bios + zamak-core)
+stage3.bin:
+	cd $(STAGE3_DIR) && $(CARGO) build -Zbuild-std=core,alloc --target $(STAGE3_TARGET_JSON) --release
+	$(OBJCOPY) -O binary target/i686-zamak/release/zamak-bios stage3.bin
+
+# Compress stage3 with gzip for the decompressor
+stage3.bin.gz: stage3.bin
+	gzip -9 -k -f stage3.bin
+
+# Stage 2: decompressor (zamak-decompressor + miniz_oxide)
+stage2.bin: stage3.bin.gz
+	cd $(STAGE2_DIR) && $(CARGO) build -Zbuild-std=core,alloc --target $(STAGE2_TARGET_JSON) --release
+	$(OBJCOPY) -O binary target/i686-zamak-decompressor/release/zamak-decompressor stage2.bin
 
 clean:
-	rm -f mbr.bin stage2.bin trampoline.bin $(IMAGE)
+	rm -f mbr.bin stage2.bin stage3.bin stage3.bin.gz $(IMAGE)
+	cd $(STAGE1_DIR) && $(CARGO) clean
 	cd $(STAGE2_DIR) && $(CARGO) clean
+	cd $(STAGE3_DIR) && $(CARGO) clean

@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Mohamed Hammad
+
+[package]
+name = "zamak-test-kernel"
+version = "0.6.9"
+edition = "2021"
+description = "Minimal Limine-Protocol test kernel for zamak-test end-to-end smoke tests"
+
+[[bin]]
+name = "zamak-test-kernel"
+path = "src/main.rs"
+
+# A second kernel that boots via Limine Protocol, runs every safe asm
+# wrapper, and prints `ASM_VERIFY_OK` to COM1 if the resulting hardware
+# state matches the expected values (TEST-4 / §3.9.9 / CI-10).
+[[bin]]
+name = "zamak-asm-verify-kernel"
+path = "src/asm_verify.rs"
+
+[dependencies]
+zamak-proto = { path = "../zamak-proto" }
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1
