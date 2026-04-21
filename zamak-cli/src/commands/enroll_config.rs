@@ -74,7 +74,7 @@ pub fn run(
             "enroll-config: no ZAMAK hash slot found in '{efi_path}'"
         ))
         .with_hint(
-            "Rebuild the EFI binary with zamak-uefi 0.6.9+ — it embeds the \
+            "Rebuild the EFI binary with zamak-uefi 0.7.0+ — it embeds the \
              ZAMAK_CFG_HASH marker that enroll-config patches.",
         )
     })?;

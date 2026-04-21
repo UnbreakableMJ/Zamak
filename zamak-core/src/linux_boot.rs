@@ -353,3 +353,195 @@ const _: () = {
         "BootParams must be exactly 4096 bytes (one page)"
     );
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Construct a minimal valid bzImage-like buffer. Protocol version
+    /// defaults to 2.10 (relocatable + min_alignment fields present).
+    fn mk_bzimage(version: u16, relocatable: bool, setup_sects: u8) -> alloc::vec::Vec<u8> {
+        // Total size = (1 + setup_sects) * 512 + a few bytes of kernel.
+        let setup_size = (1 + setup_sects as usize) * 512;
+        let mut img = alloc::vec![0u8; setup_size + 16];
+        img[0x1F1] = setup_sects;
+        // syssize (paragraphs of protected-mode kernel) — any non-zero.
+        img[0x1F4..0x1F8].copy_from_slice(&16u32.to_le_bytes());
+        // HdrS magic.
+        img[0x202..0x206].copy_from_slice(&HDRS_MAGIC.to_le_bytes());
+        // version.
+        img[0x206..0x208].copy_from_slice(&version.to_le_bytes());
+        // loadflags: LOADED_HIGH + CAN_USE_HEAP.
+        img[0x211] = 0x01 | 0x80;
+        // initrd_addr_max.
+        img[0x22C..0x230].copy_from_slice(&0x7FFF_FFFFu32.to_le_bytes());
+        // kernel_alignment 0x20_0000 (2 MiB).
+        img[0x230..0x234].copy_from_slice(&0x0020_0000u32.to_le_bytes());
+        img[0x234] = if relocatable { 1 } else { 0 };
+        // min_alignment shift = 21 (1<<21 = 2 MiB).
+        img[0x235] = 21;
+        // cmdline_size.
+        img[0x238..0x23C].copy_from_slice(&4096u32.to_le_bytes());
+        // pref_address.
+        img[0x258..0x260].copy_from_slice(&0x0010_0000u64.to_le_bytes());
+        img
+    }
+
+    #[test]
+    fn parse_rejects_short_image() {
+        let err = parse_setup_header(&[0u8; 32]).unwrap_err();
+        assert_eq!(err, LinuxBootError::ImageTooSmall);
+    }
+
+    #[test]
+    fn parse_rejects_missing_magic() {
+        let mut img = alloc::vec![0u8; 0x400];
+        img[0x1F1] = 4;
+        // No HdrS magic at 0x202.
+        let err = parse_setup_header(&img).unwrap_err();
+        assert_eq!(err, LinuxBootError::InvalidMagic);
+    }
+
+    #[test]
+    fn parse_rejects_old_protocol_version() {
+        let img = mk_bzimage(0x0201, true, 4);
+        let err = parse_setup_header(&img).unwrap_err();
+        assert!(matches!(err, LinuxBootError::UnsupportedVersion(_)));
+    }
+
+    #[test]
+    fn parse_rejects_empty_kernel() {
+        // Produce an image where the "kernel" portion after setup_size
+        // is zero bytes. We can't easily craft this with mk_bzimage, so
+        // hand-assemble.
+        let mut img = alloc::vec![0u8; 0x260];
+        img[0x1F1] = 0; // setup_sects = 0 → default 4 → setup_size = 5*512 = 2560
+        img[0x202..0x206].copy_from_slice(&HDRS_MAGIC.to_le_bytes());
+        img[0x206..0x208].copy_from_slice(&0x020Au16.to_le_bytes());
+        // img.len() (0x260) <= setup_size (2560) → EmptyKernel.
+        let err = parse_setup_header(&img).unwrap_err();
+        assert_eq!(err, LinuxBootError::EmptyKernel);
+    }
+
+    #[test]
+    fn parse_success_populates_all_fields() {
+        let img = mk_bzimage(0x020F, true, 4);
+        let hdr = parse_setup_header(&img).unwrap();
+        assert_eq!(hdr.version, 0x020F);
+        assert_eq!(hdr.setup_sects, 4);
+        assert_eq!(hdr.setup_size, 5 * 512);
+        assert_eq!(hdr.kernel_alignment, 0x0020_0000);
+        assert_eq!(hdr.min_alignment, 1u32 << 21);
+        assert_eq!(hdr.cmdline_size, 4096);
+        assert_eq!(hdr.pref_address, 0x0010_0000);
+        assert!(hdr.relocatable);
+    }
+
+    #[test]
+    fn setup_sects_zero_falls_back_to_four() {
+        let mut img = mk_bzimage(0x020A, true, 4);
+        img[0x1F1] = 0;
+        let hdr = parse_setup_header(&img).unwrap();
+        assert_eq!(hdr.setup_sects, 4);
+    }
+
+    #[test]
+    fn kernel_offset_and_size_helpers() {
+        let img = mk_bzimage(0x020F, true, 4);
+        let hdr = parse_setup_header(&img).unwrap();
+        assert_eq!(kernel_offset(&hdr), hdr.setup_size);
+        assert_eq!(kernel_size(&hdr, img.len()), img.len() - hdr.setup_size);
+    }
+
+    #[test]
+    fn kernel_load_address_relocatable_returns_pref() {
+        let img = mk_bzimage(0x020F, true, 4);
+        let hdr = parse_setup_header(&img).unwrap();
+        assert_eq!(kernel_load_address(&hdr), hdr.pref_address);
+    }
+
+    #[test]
+    fn kernel_load_address_non_relocatable_returns_default() {
+        let img = mk_bzimage(0x020F, false, 4);
+        let hdr = parse_setup_header(&img).unwrap();
+        assert_eq!(kernel_load_address(&hdr), 0x0010_0000);
+    }
+
+    #[test]
+    fn boot_params_is_one_page() {
+        assert_eq!(core::mem::size_of::<BootParams>(), 4096);
+    }
+
+    #[test]
+    fn boot_params_populate_sets_loader_and_flags() {
+        let img = mk_bzimage(0x020F, true, 4);
+        let hdr = parse_setup_header(&img).unwrap();
+        let mut bp = BootParams::zeroed();
+        bp.populate_from_bzimage(&img, &hdr);
+        // type_of_loader should be 0xFF (our ID 0xFF in low nibble + 0 version).
+        assert_eq!(bp.data[offsets::TYPE_OF_LOADER], 0xFF);
+        // loadflags should have LOADED_HIGH + CAN_USE_HEAP set.
+        assert_eq!(bp.data[offsets::LOADFLAGS] & 0x01, 0x01);
+        assert_eq!(bp.data[offsets::LOADFLAGS] & 0x80, 0x80);
+    }
+
+    #[test]
+    fn boot_params_cmdline_and_initrd_setters() {
+        let mut bp = BootParams::zeroed();
+        bp.set_cmdline(0x1234_5678);
+        bp.set_initrd(0x0abc_def0, 0x0100_0000);
+        bp.set_code32_start(0x0010_0000);
+        assert_eq!(
+            u32::from_le_bytes(
+                bp.data[offsets::CMD_LINE_PTR..offsets::CMD_LINE_PTR + 4]
+                    .try_into()
+                    .unwrap()
+            ),
+            0x1234_5678
+        );
+        assert_eq!(
+            u32::from_le_bytes(
+                bp.data[offsets::RAMDISK_IMAGE..offsets::RAMDISK_IMAGE + 4]
+                    .try_into()
+                    .unwrap()
+            ),
+            0x0abc_def0
+        );
+        assert_eq!(
+            u32::from_le_bytes(
+                bp.data[offsets::RAMDISK_SIZE..offsets::RAMDISK_SIZE + 4]
+                    .try_into()
+                    .unwrap()
+            ),
+            0x0100_0000
+        );
+        assert_eq!(
+            u32::from_le_bytes(
+                bp.data[offsets::CODE32_START..offsets::CODE32_START + 4]
+                    .try_into()
+                    .unwrap()
+            ),
+            0x0010_0000
+        );
+    }
+
+    #[test]
+    fn boot_params_e820_entries_roundtrip() {
+        let mut bp = BootParams::zeroed();
+        assert!(bp.add_e820_entry(0, 0x1000, 1));
+        assert!(bp.add_e820_entry(0x1000, 0x2000, 2));
+        assert_eq!(bp.data[offsets::E820_ENTRIES], 2);
+        // First entry: base=0, size=0x1000, type=1.
+        let e0 = &bp.data[offsets::E820_TABLE..offsets::E820_TABLE + 20];
+        assert_eq!(u64::from_le_bytes(e0[0..8].try_into().unwrap()), 0);
+        assert_eq!(u64::from_le_bytes(e0[8..16].try_into().unwrap()), 0x1000);
+        assert_eq!(u32::from_le_bytes(e0[16..20].try_into().unwrap()), 1);
+    }
+
+    #[test]
+    fn boot_params_e820_refuses_overflow() {
+        let mut bp = BootParams::zeroed();
+        bp.data[offsets::E820_ENTRIES] = offsets::E820_MAX as u8;
+        assert!(!bp.add_e820_entry(0, 0x1000, 1));
+    }
+}

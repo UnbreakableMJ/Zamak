@@ -111,3 +111,101 @@ impl<'a> Canvas<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mk_fb(width: u64, height: u64, backing: &mut alloc::vec::Vec<u8>) -> Framebuffer {
+        let bpp: u64 = 32;
+        let pitch = width * (bpp / 8);
+        let size = (pitch * height) as usize;
+        *backing = alloc::vec![0u8; size + 4];
+        Framebuffer {
+            address: backing.as_mut_ptr() as u64,
+            width,
+            height,
+            pitch,
+            bpp: bpp as u16,
+            red_mask_size: 8,
+            red_mask_shift: 16,
+            green_mask_size: 8,
+            green_mask_shift: 8,
+            blue_mask_size: 8,
+            blue_mask_shift: 0,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn palette_constants_match_steelbore_hex() {
+        assert_eq!(MOLTEN_AMBER, Color { r: 0xD9, g: 0x8E, b: 0x32 });
+        assert_eq!(STEEL_BLUE, Color { r: 0x4B, g: 0x7E, b: 0xB0 });
+        assert_eq!(RADIUM_GREEN, Color { r: 0x50, g: 0xFA, b: 0x7B });
+    }
+
+    #[test]
+    fn from_theme_rgb_copies_components() {
+        let rgb = zamak_theme::Rgb { r: 0xAB, g: 0xCD, b: 0xEF };
+        let c: Color = rgb.into();
+        assert_eq!(c, Color { r: 0xAB, g: 0xCD, b: 0xEF });
+    }
+
+    #[test]
+    fn canvas_reports_framebuffer_dimensions() {
+        let mut backing = alloc::vec::Vec::new();
+        let mut fb = mk_fb(64, 32, &mut backing);
+        let canvas = Canvas::new(&mut fb);
+        assert_eq!(canvas.width(), 64);
+        assert_eq!(canvas.height(), 32);
+    }
+
+    #[test]
+    fn put_pixel_writes_correct_value_with_mask_shifts() {
+        let mut backing = alloc::vec::Vec::new();
+        let mut fb = mk_fb(4, 1, &mut backing);
+        let mut canvas = Canvas::new(&mut fb);
+        canvas.put_pixel(0, 0, Color { r: 0x12, g: 0x34, b: 0x56 });
+        // red_mask_shift=16, green_mask_shift=8, blue_mask_shift=0.
+        // Expected word: 0x00_12_34_56 little-endian → bytes 56 34 12 00.
+        assert_eq!(&backing[0..4], &[0x56, 0x34, 0x12, 0x00]);
+    }
+
+    #[test]
+    fn put_pixel_out_of_bounds_does_not_panic() {
+        let mut backing = alloc::vec::Vec::new();
+        let mut fb = mk_fb(4, 4, &mut backing);
+        let mut canvas = Canvas::new(&mut fb);
+        canvas.put_pixel(4, 0, MOLTEN_AMBER);   // x == width
+        canvas.put_pixel(0, 4, MOLTEN_AMBER);   // y == height
+        canvas.put_pixel(999, 999, MOLTEN_AMBER);
+        assert!(backing[..16].iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn clear_fills_entire_framebuffer() {
+        let mut backing = alloc::vec::Vec::new();
+        let mut fb = mk_fb(4, 2, &mut backing);
+        let mut canvas = Canvas::new(&mut fb);
+        canvas.clear(RED_OXIDE);
+        // 4×2 pixels × 4 bytes/pixel = 32 bytes. Each pixel's blue byte
+        // is at offset 0, red at offset 2.
+        assert_eq!(backing[0], 0x5C, "blue byte of first pixel");
+        assert_eq!(backing[2], 0xFF, "red byte of first pixel");
+        assert_eq!(backing[28], 0x5C, "blue byte of last pixel");
+    }
+
+    #[test]
+    fn draw_rect_fills_exact_region() {
+        let mut backing = alloc::vec::Vec::new();
+        let mut fb = mk_fb(4, 4, &mut backing);
+        let mut canvas = Canvas::new(&mut fb);
+        // Fill a 2x2 rect starting at (1, 1) with green.
+        canvas.draw_rect(1, 1, 2, 2, RADIUM_GREEN);
+        // Pixel (0, 0) should still be zero.
+        assert_eq!(&backing[0..4], &[0, 0, 0, 0]);
+        // Pixel (1, 1) is at offset y*pitch + x*4 = 1*16 + 1*4 = 20.
+        assert_eq!(backing[20 + 2], 0x50, "red at (1,1)");
+        assert_eq!(backing[20 + 1], 0xFA, "green at (1,1)");
+    }
+}

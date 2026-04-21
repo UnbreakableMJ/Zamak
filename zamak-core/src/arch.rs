@@ -180,8 +180,11 @@ pub mod x86 {
             assert!(b >= a, "rdtsc regressed: {a} > {b}");
         }
 
-        /// `spin_wait` must actually spend wall-clock time.
-        #[cfg(target_arch = "x86_64")]
+        /// `spin_wait` must actually spend wall-clock time. Skipped under
+        /// Miri because the `pause` stub is a no-op and `rdtsc` stub
+        /// increments by 1 per call — the test checks real-hardware
+        /// behaviour that Miri cannot model.
+        #[cfg(all(target_arch = "x86_64", not(miri)))]
         #[test]
         fn spin_wait_elapses_some_tsc_cycles() {
             let start = rdtsc();

@@ -12,8 +12,42 @@ All dates use ISO 8601 format (YYYY-MM-DD).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-04-21
+
+First cut of the dual-mode host CLI (SFRS v1.0.0), multi-arch UEFI
+paging for AArch64 + RISC-V 64, and the coverage / Miri / FreeBSD
+compliance bundle. M0–M5 functionally complete; M6-1 blocked on
+rustc upstream `loongarch64-unknown-uefi` support; M6-3 awaits
+bare-metal perf validation.
+
 ### Added
 
+- **FreeBSD CI leg** (POSIX-1 / POSIX-2) — new `freebsd` job in
+  `.forgejo/workflows/ci.yml` using `vmactions/freebsd-vm@v1`
+  (FreeBSD 14.2 guest) runs `cargo test -p zamak-cli`. The release
+  workflow also gains a `cli-freebsd` job that produces a
+  `zamak-freebsd-x86_64` binary as part of every tagged release.
+  The full host-CLI portability claim now spans Linux x86-64, Linux
+  AArch64, macOS AArch64, and FreeBSD x86-64.
+
+### Fixed
+
+- **CI / release workflows** — removed stale `cd Zamak && ...`
+  prefixes inherited from the pre-reorg subdirectory layout; every
+  step now runs at the repo root. `sbom` and release workflows also
+  updated to call `zamak-cli sbom --release-version ...` (renamed
+  from the global-shadowing `--version` alias).
+
+- **TEST-1 line coverage target met** — `cargo llvm-cov` now reports
+  **80.52% line / 87.04% function coverage** on `zamak-core`. Added
+  58 new unit tests across seven previously-untested modules:
+  `elf` (4), `font` (7), `gfx` (7), `iso9660` (9), `linux_boot` (14),
+  `protocol` (5), `wallpaper::draw` (4), plus six `rng` tests
+  covering `X86KaslrRng`, `TimerJitterRng`, and `align_up`/`align_down`.
+- **TEST-2 Miri runs clean** — `cargo +nightly miri test -p
+  zamak-core --lib` reports 158 passed / 0 failed. `spin_wait`
+  timing test re-gated `#[cfg(all(target_arch = "x86_64",
+  not(miri)))]` because Miri's rdtsc stub is constant.
 - **Limine v10.x differential fuzz target** (TEST-6) — new
   `fuzz/fuzz_targets/config_parser_differential.rs` fuzz harness that
   runs `zamak_core::config::parse` and a hand-rolled Limine v10.x

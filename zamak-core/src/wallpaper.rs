@@ -274,4 +274,99 @@ mod tests {
         };
         assert_eq!(bitmap.pixel(99, 99), Color { r: 0, g: 0, b: 0 });
     }
+
+    // -- `draw` in each style -----------------------------------
+
+    fn mk_fb(width: u64, height: u64, backing: &mut alloc::vec::Vec<u8>) -> crate::protocol::Framebuffer {
+        let bpp: u64 = 32;
+        let pitch = width * (bpp / 8);
+        let size = (pitch * height) as usize;
+        *backing = alloc::vec![0u8; size + 4];
+        crate::protocol::Framebuffer {
+            address: backing.as_mut_ptr() as u64,
+            width,
+            height,
+            pitch,
+            bpp: bpp as u16,
+            red_mask_size: 8,
+            red_mask_shift: 16,
+            green_mask_size: 8,
+            green_mask_shift: 8,
+            blue_mask_size: 8,
+            blue_mask_shift: 0,
+            ..Default::default()
+        }
+    }
+
+    fn solid_bitmap(width: u32, height: u32, color: Color) -> Bitmap {
+        let pixels = alloc::vec![color; (width * height) as usize];
+        Bitmap { width, height, pixels }
+    }
+
+    #[test]
+    fn draw_tiled_fills_entire_canvas() {
+        let bmp = solid_bitmap(3, 3, Color { r: 0x11, g: 0x22, b: 0x33 });
+        let mut backing = alloc::vec::Vec::new();
+        let mut fb = mk_fb(8, 8, &mut backing);
+        let mut canvas = Canvas::new(&mut fb);
+        draw(&mut canvas, &bmp, Style::Tiled);
+        // Blue byte is at offset 0 within each pixel word.
+        for y in 0..8 {
+            for x in 0..8 {
+                let off = ((y * 8 + x) * 4) as usize;
+                assert_eq!(backing[off], 0x33, "blue mismatch at ({x},{y})");
+            }
+        }
+    }
+
+    #[test]
+    fn draw_centered_only_touches_central_region() {
+        let bmp = solid_bitmap(2, 2, Color { r: 0xFF, g: 0xFF, b: 0xFF });
+        let mut backing = alloc::vec::Vec::new();
+        let mut fb = mk_fb(8, 8, &mut backing);
+        let mut canvas = Canvas::new(&mut fb);
+        draw(&mut canvas, &bmp, Style::Centered);
+        // Bitmap 2×2 centered in 8×8 → offset (3, 3). Pixels (0, 0)
+        // and (7, 7) must stay black (zero).
+        let corner = ((0 * 8 + 0) * 4) as usize;
+        assert_eq!(&backing[corner..corner + 4], &[0, 0, 0, 0]);
+        let far = ((7 * 8 + 7) * 4) as usize;
+        assert_eq!(&backing[far..far + 4], &[0, 0, 0, 0]);
+        // Center pixel (3, 3) must be white.
+        let center = ((3 * 8 + 3) * 4) as usize;
+        assert_eq!(backing[center], 0xFF, "blue of centered pixel");
+    }
+
+    #[test]
+    fn draw_stretched_rescales_to_canvas() {
+        // Bitmap 2x2 with a known checker pattern.
+        let pixels = alloc::vec![
+            Color { r: 0xFF, g: 0, b: 0 }, // top-left
+            Color { r: 0, g: 0xFF, b: 0 }, // top-right
+            Color { r: 0, g: 0, b: 0xFF }, // bottom-left
+            Color { r: 0xFF, g: 0xFF, b: 0xFF }, // bottom-right
+        ];
+        let bmp = Bitmap { width: 2, height: 2, pixels };
+        let mut backing = alloc::vec::Vec::new();
+        let mut fb = mk_fb(4, 4, &mut backing);
+        let mut canvas = Canvas::new(&mut fb);
+        draw(&mut canvas, &bmp, Style::Stretched);
+        // After nearest-neighbour upscale 2×2 → 4×4, the top-left
+        // quadrant should all be red, blue byte = 0, red byte = 0xFF.
+        let p00 = 0;
+        assert_eq!(backing[p00 + 2], 0xFF, "red of (0,0)");
+        assert_eq!(backing[p00 + 0], 0, "blue of (0,0)");
+    }
+
+    #[test]
+    fn draw_stretched_handles_zero_size_bitmap() {
+        let bmp = Bitmap { width: 0, height: 0, pixels: alloc::vec![] };
+        let mut backing = alloc::vec::Vec::new();
+        let mut fb = mk_fb(4, 4, &mut backing);
+        let mut canvas = Canvas::new(&mut fb);
+        // Must not divide-by-zero or panic.
+        draw(&mut canvas, &bmp, Style::Stretched);
+        // Canvas remains untouched (all zero).
+        assert!(backing[..64].iter().all(|&b| b == 0));
+    }
 }

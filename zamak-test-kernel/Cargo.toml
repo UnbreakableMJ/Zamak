@@ -3,7 +3,7 @@
 
 [package]
 name = "zamak-test-kernel"
-version = "0.6.9"
+version = "0.7.0"
 edition = "2021"
 description = "Minimal Limine-Protocol test kernel for zamak-test end-to-end smoke tests"
 

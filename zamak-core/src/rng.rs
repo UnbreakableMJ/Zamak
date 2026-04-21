@@ -417,4 +417,75 @@ mod tests {
         // Just verify it returns without panicking.
         let _ = rng.get_u64();
     }
+
+    #[test]
+    fn timer_jitter_reads_timer_64_times() {
+        // TimerJitterRng samples the callback 64 times per `get_u64`
+        // (once for `prev`, then 64 deltas → 65 total reads). Verify
+        // the callback is called the full 65 times, confirming no
+        // short-circuit optimization silently dropped the loop.
+        let mut reads: u32 = 0;
+        let mut rng = TimerJitterRng::new(|| {
+            reads += 1;
+            reads as u64
+        });
+        let _ = rng.get_u64();
+        assert_eq!(reads, 65, "TimerJitterRng did not sample the timer 65 times");
+    }
+
+    #[test]
+    fn kaslr_base_exact_fit_returns_min() {
+        // When max_addr - min_addr == kernel_size exactly, there is
+        // only one valid base (min_addr) — the function must still
+        // return it rather than None.
+        let mut rng = CountingRng { state: 0 };
+        let min_addr = KASLR_ALIGNMENT; // 1 GiB
+        let kernel_size = KASLR_ALIGNMENT; // 1 GiB kernel.
+        let max_addr = min_addr + kernel_size;
+        let base = kaslr_base(&mut rng, min_addr, max_addr, kernel_size).unwrap();
+        assert_eq!(base, min_addr);
+    }
+
+    #[test]
+    fn x86_kaslr_rng_new_does_not_panic() {
+        // Just exercises the X86KaslrRng::new() detection path — the
+        // result (which flags are set) depends on host CPU but the
+        // call itself must never trap on any x86-64 host.
+        let _rng = X86KaslrRng::new();
+    }
+
+    #[test]
+    fn x86_kaslr_rng_get_u64_returns_nonzero_sometimes() {
+        // With fallback to rdtsc + mixing, we should see variety
+        // across 100 calls. At minimum not all zero (which would
+        // indicate every detection branch failed and the fallback
+        // also collapsed).
+        let mut rng = X86KaslrRng::default();
+        let mut saw_nonzero = false;
+        for _ in 0..100 {
+            if rng.get_u64() != 0 {
+                saw_nonzero = true;
+                break;
+            }
+        }
+        assert!(saw_nonzero, "X86KaslrRng yielded 100 zeros — fallback broken");
+    }
+
+    #[test]
+    fn align_up_and_align_down_agree_on_aligned_input() {
+        assert_eq!(align_up(0x1000, 0x1000), 0x1000);
+        assert_eq!(align_down(0x1000, 0x1000), 0x1000);
+    }
+
+    #[test]
+    fn align_up_rounds_toward_next_boundary() {
+        assert_eq!(align_up(0x1001, 0x1000), 0x2000);
+        assert_eq!(align_up(1, 0x1000), 0x1000);
+    }
+
+    #[test]
+    fn align_down_rounds_toward_previous_boundary() {
+        assert_eq!(align_down(0x1FFF, 0x1000), 0x1000);
+        assert_eq!(align_down(0x2000, 0x1000), 0x2000);
+    }
 }

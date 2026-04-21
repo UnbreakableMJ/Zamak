@@ -61,3 +61,77 @@ pub fn scan_requests(kernel_bytes: &[u8]) -> Vec<*mut RawRequest> {
 
     requests
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build a kernel-image byte slice containing: leading noise,
+    /// START_MARKER, one request whose first 16 bytes are
+    /// COMMON_MAGIC, END_MARKER, trailing noise.
+    fn mk_image_with_one_request() -> alloc::vec::Vec<u8> {
+        let start = unsafe {
+            core::slice::from_raw_parts(START_MARKER.as_ptr().cast::<u8>(), 32)
+        };
+        let end = unsafe {
+            core::slice::from_raw_parts(END_MARKER.as_ptr().cast::<u8>(), 16)
+        };
+        let magic = unsafe {
+            core::slice::from_raw_parts(COMMON_MAGIC.as_ptr().cast::<u8>(), 16)
+        };
+
+        let mut img = alloc::vec::Vec::new();
+        img.extend_from_slice(&[0xAAu8; 64]); // noise
+        img.extend_from_slice(start);         // start marker
+        img.extend_from_slice(magic);         // common magic
+        img.extend_from_slice(&[0u8; 16]);    // request id continuation
+        img.extend_from_slice(end);           // end marker
+        img.extend_from_slice(&[0xFFu8; 64]); // noise
+        img
+    }
+
+    #[test]
+    fn scan_requests_finds_request_between_markers() {
+        let img = mk_image_with_one_request();
+        let reqs = scan_requests(&img);
+        assert_eq!(reqs.len(), 1, "expected 1 request, got {}", reqs.len());
+    }
+
+    #[test]
+    fn scan_requests_returns_empty_on_empty_slice() {
+        let reqs = scan_requests(&[]);
+        assert!(reqs.is_empty());
+    }
+
+    #[test]
+    fn scan_requests_returns_empty_when_no_start_marker() {
+        let reqs = scan_requests(&[0u8; 512]);
+        assert!(reqs.is_empty());
+    }
+
+    #[test]
+    fn scan_requests_stops_at_end_marker() {
+        // Same shape as mk_image_with_one_request but with NO common
+        // magic between the markers — should return zero requests.
+        let start = unsafe {
+            core::slice::from_raw_parts(START_MARKER.as_ptr().cast::<u8>(), 32)
+        };
+        let end = unsafe {
+            core::slice::from_raw_parts(END_MARKER.as_ptr().cast::<u8>(), 16)
+        };
+        let mut img = alloc::vec::Vec::new();
+        img.extend_from_slice(&[0u8; 32]);
+        img.extend_from_slice(start);
+        img.extend_from_slice(&[0u8; 32]); // padding, not a magic
+        img.extend_from_slice(end);
+        let reqs = scan_requests(&img);
+        assert!(reqs.is_empty());
+    }
+
+    #[test]
+    fn scan_requests_ignores_truncated_tail() {
+        // Truncate to less than 32 bytes — function must not panic.
+        let reqs = scan_requests(&[0u8; 8]);
+        assert!(reqs.is_empty());
+    }
+}

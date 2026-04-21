@@ -259,3 +259,201 @@ fn read_le32(bytes: &[u8]) -> u32 {
 }
 
 use alloc::string::ToString;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn read_le32_matches_from_le_bytes() {
+        let b = [0x78, 0x56, 0x34, 0x12];
+        assert_eq!(read_le32(&b), 0x1234_5678);
+    }
+
+    #[test]
+    fn parse_directory_record_extracts_file_entry() {
+        let mut rec = alloc::vec![0u8; 40];
+        rec[0] = 40; // record_len
+        // LBA LE at [2..6].
+        rec[2..6].copy_from_slice(&100u32.to_le_bytes());
+        // data size LE at [10..14].
+        rec[10..14].copy_from_slice(&512u32.to_le_bytes());
+        // Flags: 0 = regular file.
+        rec[25] = 0;
+        // Name length.
+        rec[32] = 5;
+        rec[33..38].copy_from_slice(b"A.TXT");
+
+        let entry = parse_directory_record(&rec).unwrap();
+        assert_eq!(entry.name, "A.TXT");
+        assert_eq!(entry.size, 512);
+        assert_eq!(entry.opaque_id, 100);
+        assert_eq!(entry.file_type, FileType::File);
+    }
+
+    #[test]
+    fn parse_directory_record_detects_directory_flag() {
+        let mut rec = alloc::vec![0u8; 38];
+        rec[0] = 38;
+        rec[2..6].copy_from_slice(&20u32.to_le_bytes());
+        rec[10..14].copy_from_slice(&2048u32.to_le_bytes());
+        rec[25] = 0x02; // directory flag
+        rec[32] = 3;
+        rec[33..36].copy_from_slice(b"DIR");
+        let entry = parse_directory_record(&rec).unwrap();
+        assert_eq!(entry.file_type, FileType::Directory);
+    }
+
+    #[test]
+    fn parse_directory_record_skips_dot_and_dotdot() {
+        let mut rec = alloc::vec![0u8; 34];
+        rec[0] = 34;
+        rec[32] = 1;
+        rec[33] = 0x00; // "."
+        assert!(parse_directory_record(&rec).is_none());
+        rec[33] = 0x01; // ".."
+        assert!(parse_directory_record(&rec).is_none());
+    }
+
+    #[test]
+    fn parse_directory_record_rejects_too_short() {
+        let rec = [0u8; 33];
+        assert!(parse_directory_record(&rec).is_none());
+    }
+
+    #[test]
+    fn parse_directory_record_rejects_zero_name_len() {
+        let mut rec = alloc::vec![0u8; 40];
+        rec[0] = 40;
+        rec[32] = 0;
+        assert!(parse_directory_record(&rec).is_none());
+    }
+
+    // ---------------- full-stack mount / find test -----------------
+
+    /// Synthetic ISO 9660 image: a PVD at sector 16 pointing to a
+    /// root directory at sector 20; the root dir holds one file
+    /// named "BOOT.BIN;1" at sector 30 with 512 bytes of 0xAB.
+    struct MockIso {
+        sectors: alloc::vec::Vec<[u8; 2048]>,
+    }
+
+    impl MockIso {
+        fn build() -> Self {
+            let mut sectors = alloc::vec![[0u8; 2048]; 64];
+
+            // Sector 16: Primary Volume Descriptor.
+            sectors[16][0] = VD_TYPE_PRIMARY;
+            sectors[16][1..6].copy_from_slice(STANDARD_ID);
+            // Root directory record at offset 156 (34 bytes).
+            let root = &mut sectors[16][156..190];
+            root[0] = 34; // record length
+            root[2..6].copy_from_slice(&20u32.to_le_bytes()); // LBA
+            root[10..14].copy_from_slice(&2048u32.to_le_bytes()); // size
+            root[25] = 0x02; // directory flag
+            root[32] = 1;
+            root[33] = 0x00; // self "."
+
+            // Sector 17: Volume Descriptor Terminator (unused by mount()
+            // once PVD succeeds, but catches scan-bug regressions).
+            sectors[17][0] = VD_TYPE_TERMINATOR;
+            sectors[17][1..6].copy_from_slice(STANDARD_ID);
+
+            // Sector 20: root directory with one file record.
+            let mut off = 0;
+            // "." entry.
+            sectors[20][off] = 34;
+            sectors[20][off + 2..off + 6].copy_from_slice(&20u32.to_le_bytes());
+            sectors[20][off + 10..off + 14].copy_from_slice(&2048u32.to_le_bytes());
+            sectors[20][off + 25] = 0x02;
+            sectors[20][off + 32] = 1;
+            sectors[20][off + 33] = 0x00;
+            off += 34;
+            // File entry "BOOT.BIN;1".
+            let name = b"BOOT.BIN;1";
+            let rec_len = 33 + name.len();
+            sectors[20][off] = rec_len as u8;
+            sectors[20][off + 2..off + 6].copy_from_slice(&30u32.to_le_bytes());
+            sectors[20][off + 10..off + 14].copy_from_slice(&512u32.to_le_bytes());
+            sectors[20][off + 25] = 0x00;
+            sectors[20][off + 32] = name.len() as u8;
+            sectors[20][off + 33..off + 33 + name.len()].copy_from_slice(name);
+
+            // Sector 30: file contents.
+            sectors[30].fill(0xAB);
+
+            Self { sectors }
+        }
+    }
+
+    impl BlockDevice for MockIso {
+        fn read_sectors(
+            &self,
+            start_sector: u64,
+            count: usize,
+            buffer: &mut [u8],
+        ) -> Result<(), Error> {
+            // Our "device_sector_size" is ISO_SECTOR_SIZE (2048) in the
+            // mock — that keeps the test simple: one ISO sector = one
+            // device sector.
+            for i in 0..count {
+                let s = (start_sector as usize) + i;
+                if s >= self.sectors.len() {
+                    return Err(Error::IoError);
+                }
+                let dst = &mut buffer[i * 2048..(i + 1) * 2048];
+                dst.copy_from_slice(&self.sectors[s]);
+            }
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn mount_reads_pvd_and_finds_boot_bin() {
+        let dev = MockIso::build();
+        let fs = Iso9660::mount(&dev, 2048).expect("mount must succeed");
+        let entry = fs
+            .find_file("/BOOT.BIN")
+            .expect("find_file must locate BOOT.BIN");
+        assert_eq!(entry.size, 512);
+        assert_eq!(entry.file_type, FileType::File);
+        let mut buf = alloc::vec![0u8; 512];
+        let n = fs.read_file(&entry, &mut buf).expect("read_file must succeed");
+        assert_eq!(n, 512);
+        assert!(buf.iter().all(|&b| b == 0xAB));
+    }
+
+    #[test]
+    fn find_missing_file_returns_not_found() {
+        let dev = MockIso::build();
+        let fs = Iso9660::mount(&dev, 2048).unwrap();
+        let err = fs.find_file("/NOPE.TXT").unwrap_err();
+        assert!(matches!(err, Error::FileNotFound));
+    }
+
+    #[test]
+    fn mount_rejects_non_iso_media() {
+        struct BadDev;
+        impl BlockDevice for BadDev {
+            fn read_sectors(
+                &self,
+                _s: u64,
+                count: usize,
+                buf: &mut [u8],
+            ) -> Result<(), Error> {
+                // Return a buffer whose standard ID is not CD001.
+                for i in 0..count * 2048 {
+                    if i < buf.len() {
+                        buf[i] = 0xFF;
+                    }
+                }
+                Ok(())
+            }
+        }
+        match Iso9660::mount(&BadDev, 2048) {
+            Err(Error::InvalidFilesystem) => {}
+            Err(e) => panic!("expected InvalidFilesystem, got {:?}", e),
+            Ok(_) => panic!("expected mount to fail on bogus media"),
+        }
+    }
+}

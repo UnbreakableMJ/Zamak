@@ -75,7 +75,7 @@ fn fulfill_requests(
             protocol::BOOTLOADER_INFO_ID => {
                 let response = Box::leak(Box::new(protocol::BootloaderInfoResponse {
                     name: Box::leak(Box::new("Zamak-Bios\0")).as_ptr() as u64,
-                    version: Box::leak(Box::new("0.6.9\0")).as_ptr() as u64,
+                    version: Box::leak(Box::new(concat!(env!("CARGO_PKG_VERSION"), "\0"))).as_ptr() as u64,
                 }));
                 req.response = response as *mut _ as u64;
             }
