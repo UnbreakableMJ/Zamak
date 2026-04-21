@@ -115,7 +115,7 @@ jobs:
       - name: compute SHA256SUMS
         run: |
           cd dist
-          find . -type f | xargs sha256sum > ../SHA256SUMS
+          find . -type f -print0 | xargs -0 sha256sum > ../SHA256SUMS
       - name: generate SPDX SBOM
         run: |
           cargo run -p zamak-cli -- sbom \
@@ -123,4 +123,5 @@ jobs:
             --output "zamak-${GITHUB_REF_NAME#v}.spdx.json" \
             dist/**/*
       - name: create release
-        run: echo "TODO: upload dist/, SHA256SUMS, and zamak-*.spdx.json via Forgejo release API"
+        run: |
+          echo "TODO: upload dist/, SHA256SUMS, and zamak-*.spdx.json via release API"

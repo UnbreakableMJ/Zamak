@@ -237,7 +237,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86 ovmf mtools
       - name: host-safe asm wrapper tests
-        run: cargo test -p zamak-core --lib arch::
+        run: |
+          cargo test -p zamak-core --lib arch::
       - name: build asm-verify disk image
         run: ./zamak-test/build-images.sh
       - name: QEMU asm-verification suite
