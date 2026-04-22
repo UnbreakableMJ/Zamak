@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Mohamed Hammad
 
-use zamak_core::fs::{FileSystem, BlockDevice, FileEntry, FileType, Error};
-use alloc::vec::Vec;
-use alloc::vec;
 use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
+use zamak_core::fs::{BlockDevice, Error, FileEntry, FileSystem, FileType};
 
 #[repr(C, packed)]
 #[derive(Clone, Copy)]
@@ -65,13 +65,19 @@ impl<'a> Fat32<'a> {
     pub fn parse(disk: &'a mut dyn BlockDevice, lba_start: u64) -> Result<Self, Error> {
         let mut buffer = [0u8; 512];
         disk.read_sectors(lba_start, 1, &mut buffer)?;
-        
+
         let bpb = unsafe { *(buffer.as_ptr() as *const BiosParameterBlock) };
-        Ok(Self { disk, bpb, lba_start })
+        Ok(Self {
+            disk,
+            bpb,
+            lba_start,
+        })
     }
 
     fn first_data_sector(&self) -> u64 {
-        self.lba_start + self.bpb.reserved_sectors as u64 + (self.bpb.fat_count as u64 * self.bpb.sectors_per_fat_32 as u64)
+        self.lba_start
+            + self.bpb.reserved_sectors as u64
+            + (self.bpb.fat_count as u64 * self.bpb.sectors_per_fat_32 as u64)
     }
 
     fn cluster_to_lba(&self, cluster: u32) -> u64 {
@@ -79,32 +85,40 @@ impl<'a> Fat32<'a> {
     }
 
     fn next_cluster(&self, cluster: u32) -> Result<u32, Error> {
-        let fat_sector = self.lba_start + self.bpb.reserved_sectors as u64 + (cluster as u64 * 4 / 512);
+        let fat_sector =
+            self.lba_start + self.bpb.reserved_sectors as u64 + (cluster as u64 * 4 / 512);
         let fat_offset = (cluster as usize * 4) % 512;
-        
+
         let mut buffer = [0u8; 512];
         self.disk.read_sectors(fat_sector, 1, &mut buffer)?;
-        
+
         let next = unsafe { *(buffer.as_ptr().add(fat_offset) as *const u32) };
         Ok(next & 0x0FFFFFFF)
     }
 
     fn find_in_cluster(&self, start_cluster: u32, name: &str) -> Result<DirectoryEntry, Error> {
         let mut cluster = start_cluster;
-        
+
         loop {
             let lba = self.cluster_to_lba(cluster);
             let mut buffer = vec![0u8; (self.bpb.sectors_per_cluster as usize) * 512];
-            self.disk.read_sectors(lba, self.bpb.sectors_per_cluster as usize, &mut buffer)?;
+            self.disk
+                .read_sectors(lba, self.bpb.sectors_per_cluster as usize, &mut buffer)?;
 
-            let entries = unsafe { core::slice::from_raw_parts(
-                buffer.as_ptr() as *const DirectoryEntry,
-                buffer.len() / core::mem::size_of::<DirectoryEntry>()
-            ) };
+            let entries = unsafe {
+                core::slice::from_raw_parts(
+                    buffer.as_ptr() as *const DirectoryEntry,
+                    buffer.len() / core::mem::size_of::<DirectoryEntry>(),
+                )
+            };
 
             for entry in entries {
-                if entry.name[0] == 0x00 { return Err(Error::FileNotFound); }
-                if entry.name[0] == 0xE5 { continue; } // Deleted
+                if entry.name[0] == 0x00 {
+                    return Err(Error::FileNotFound);
+                }
+                if entry.name[0] == 0xE5 {
+                    continue;
+                } // Deleted
 
                 if self.compare_name(entry, name) {
                     return Ok(*entry);
@@ -112,7 +126,9 @@ impl<'a> Fat32<'a> {
             }
 
             cluster = self.next_cluster(cluster)?;
-            if cluster >= 0x0FFFFFF8 { break; }
+            if cluster >= 0x0FFFFFF8 {
+                break;
+            }
         }
 
         Err(Error::FileNotFound)
@@ -126,7 +142,9 @@ impl<'a> Fat32<'a> {
                 j = 8;
                 continue;
             }
-            if j >= 11 { break; }
+            if j >= 11 {
+                break;
+            }
             entry_name[j] = c.to_ascii_uppercase() as u8;
             j += 1;
         }
@@ -139,24 +157,32 @@ impl<'a> FileSystem for Fat32<'a> {
     fn find_file(&self, path: &str) -> Result<FileEntry, Error> {
         let mut current_cluster = self.bpb.root_cluster;
         let parts = path.split('/');
-        
+
         let mut last_entry = None;
 
         for part in parts {
-            if part.is_empty() { continue; }
+            if part.is_empty() {
+                continue;
+            }
             let entry = self.find_in_cluster(current_cluster, part)?;
             if (entry.attributes & 0x10) != 0 {
                 // Directory
-                current_cluster = ((entry.first_cluster_high as u32) << 16) | (entry.first_cluster_low as u32);
+                current_cluster =
+                    ((entry.first_cluster_high as u32) << 16) | (entry.first_cluster_low as u32);
             }
             last_entry = Some(entry);
         }
 
         let entry = last_entry.ok_or(Error::FileNotFound)?;
-        let file_type = if (entry.attributes & 0x10) != 0 { FileType::Directory } else { FileType::File };
-        
-        let start_cluster = ((entry.first_cluster_high as u32) << 16) | (entry.first_cluster_low as u32);
-        
+        let file_type = if (entry.attributes & 0x10) != 0 {
+            FileType::Directory
+        } else {
+            FileType::File
+        };
+
+        let start_cluster =
+            ((entry.first_cluster_high as u32) << 16) | (entry.first_cluster_low as u32);
+
         Ok(FileEntry {
             name: String::from(path),
             size: entry.file_size as u64,
@@ -168,26 +194,28 @@ impl<'a> FileSystem for Fat32<'a> {
     fn read_file(&self, entry: &FileEntry, buffer: &mut [u8]) -> Result<usize, Error> {
         let mut cluster = entry.opaque_id as u32;
         let mut bytes_left = entry.size as usize; // read all requested if buffer allows
-        if bytes_left > buffer.len() { bytes_left = buffer.len(); }
-        
+        if bytes_left > buffer.len() {
+            bytes_left = buffer.len();
+        }
+
         let mut offset = 0;
 
         while bytes_left > 0 && cluster < 0x0FFFFFF8 {
             let lba = self.cluster_to_lba(cluster);
             let sectors = self.bpb.sectors_per_cluster as usize;
-            
-            // We should read sectors directly to buffer if aligned? 
+
+            // We should read sectors directly to buffer if aligned?
             // For now simple reliable way: read to temp buffer if buffer chunk is small or use direct if logic allows.
             // Let's use a temp buffer matching cluster size for simplicity, then copy.
             // Optimization: Read directly to `buffer[offset..]` if size matches.
-            
+
             let cluster_size = sectors * 512;
             let mut cluster_buf = vec![0u8; cluster_size];
             self.disk.read_sectors(lba, sectors, &mut cluster_buf)?;
-            
+
             let to_copy = core::cmp::min(bytes_left, cluster_size);
-            buffer[offset..offset+to_copy].copy_from_slice(&cluster_buf[..to_copy]);
-            
+            buffer[offset..offset + to_copy].copy_from_slice(&cluster_buf[..to_copy]);
+
             offset += to_copy;
             bytes_left -= to_copy;
 
@@ -197,5 +225,3 @@ impl<'a> FileSystem for Fat32<'a> {
         Ok(offset)
     }
 }
-
-

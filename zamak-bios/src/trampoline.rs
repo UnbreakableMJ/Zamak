@@ -55,9 +55,7 @@ pub fn trampoline_size() -> usize {
     //     - None (pure address arithmetic)
     //   Worst-case on violation:
     //     - Incorrect size leads to partial copy; AP triple-faults
-    unsafe {
-        &trampoline_end as *const u8 as usize - &trampoline_start as *const u8 as usize
-    }
+    unsafe { &trampoline_end as *const u8 as usize - &trampoline_start as *const u8 as usize }
 }
 
 // §3.9.1 justification: The SMP trampoline (~22 instructions + GDTs + patchable
@@ -66,12 +64,9 @@ pub fn trampoline_size() -> usize {
 // break the relocation and GDT-relative addressing.
 global_asm!(
     ".intel_syntax noprefix",
-
     ".pushsection .trampoline, \"ax\"",
-
     ".global trampoline_start",
     "trampoline_start:",
-
     // =========================================================================
     // 16-bit Real Mode — AP wakes up here after SIPI
     // =========================================================================
@@ -113,7 +108,7 @@ global_asm!(
     // Enable Long Mode via IA32_EFER MSR
     "    mov ecx, 0xC0000080",
     "    rdmsr",
-    "    or  eax, (1 << 8)",       // LME
+    "    or  eax, (1 << 8)", // LME
     "    wrmsr",
     "",
     // Enable Paging
@@ -132,7 +127,6 @@ global_asm!(
     ".Ltramp_long_start:",
     "    hlt",
     "    jmp .Ltramp_long_start",
-
     // =========================================================================
     // GDTs for the trampoline (must be within the copied block)
     // =========================================================================
@@ -152,25 +146,21 @@ global_asm!(
     "trampoline_gdt_ptr_long:",
     "    .word . - trampoline_gdt_long - 1",
     "    .quad trampoline_gdt_long",
-
     // =========================================================================
     // Patchable fields (written by BSP before sending SIPI)
     // =========================================================================
     ".align 8",
     ".global trampoline_pml4_ptr",
     "trampoline_pml4_ptr:",
-    "    .long 0",                 // PML4 physical address (patched)
+    "    .long 0", // PML4 physical address (patched)
     ".global trampoline_entry_point",
     "trampoline_entry_point:",
-    "    .quad 0",                 // Entry point (patched)
+    "    .quad 0", // Entry point (patched)
     ".global trampoline_stack_top",
     "trampoline_stack_top:",
-    "    .quad 0",                 // Stack top (patched)
-
+    "    .quad 0", // Stack top (patched)
     ".global trampoline_end",
     "trampoline_end:",
-
     ".popsection",
-
     ".att_syntax prefix",
 );

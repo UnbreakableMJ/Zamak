@@ -70,17 +70,17 @@ pub fn parse_globals(args: &[String]) -> Result<ParsedArgs, CliError> {
                 let v = it
                     .next()
                     .ok_or_else(|| CliError::usage("--format requires a value"))?;
-                globals.format = Some(
-                    Format::parse(v)
-                        .ok_or_else(|| CliError::usage(format!("--format: unknown value '{v}'")))?,
-                );
+                globals.format =
+                    Some(Format::parse(v).ok_or_else(|| {
+                        CliError::usage(format!("--format: unknown value '{v}'"))
+                    })?);
             }
             s if s.starts_with("--format=") => {
                 let v = &s["--format=".len()..];
-                globals.format = Some(
-                    Format::parse(v)
-                        .ok_or_else(|| CliError::usage(format!("--format: unknown value '{v}'")))?,
-                );
+                globals.format =
+                    Some(Format::parse(v).ok_or_else(|| {
+                        CliError::usage(format!("--format: unknown value '{v}'"))
+                    })?);
             }
             "-E" => globals.format = Some(Format::Explore),
             "--fields" => {
@@ -182,7 +182,12 @@ mod tests {
 
     #[test]
     fn dry_run_short_and_long() {
-        assert!(parse_globals(&args(&["--dry-run"])).unwrap().globals.dry_run);
+        assert!(
+            parse_globals(&args(&["--dry-run"]))
+                .unwrap()
+                .globals
+                .dry_run
+        );
         assert!(parse_globals(&args(&["-n"])).unwrap().globals.dry_run);
     }
 
@@ -220,15 +225,13 @@ mod tests {
     #[test]
     fn subcommand_passthrough_preserves_order() {
         let p = parse_globals(&args(&[
-            "install",
-            "--mbr",
-            "a.bin",
-            "--json",
-            "--target",
-            "t",
+            "install", "--mbr", "a.bin", "--json", "--target", "t",
         ]))
         .unwrap();
         assert!(p.globals.json);
-        assert_eq!(p.remaining, vec!["install", "--mbr", "a.bin", "--target", "t"]);
+        assert_eq!(
+            p.remaining,
+            vec!["install", "--mbr", "a.bin", "--target", "t"]
+        );
     }
 }

@@ -65,12 +65,7 @@ unsafe impl GlobalAlloc for BumpAllocator {
             }
 
             if OFFSET
-                .compare_exchange_weak(
-                    current,
-                    new_offset,
-                    Ordering::AcqRel,
-                    Ordering::Acquire,
-                )
+                .compare_exchange_weak(current, new_offset, Ordering::AcqRel, Ordering::Acquire)
                 .is_ok()
             {
                 return unsafe { HEAP.data.as_mut_ptr().add(aligned) };

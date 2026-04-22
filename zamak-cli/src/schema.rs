@@ -140,12 +140,7 @@ pub fn command_schema(spec: &CommandSpec) -> Value {
     let exit_map: Vec<(String, Value)> = spec
         .exit_codes
         .iter()
-        .map(|c| {
-            (
-                c.exit_code().to_string(),
-                Value::str(c.as_str()),
-            )
-        })
+        .map(|c| (c.exit_code().to_string(), Value::str(c.as_str())))
         .collect();
     obj([
         ("$schema", Value::str(SCHEMA_URL)),
@@ -167,19 +162,14 @@ pub fn command_schema(spec: &CommandSpec) -> Value {
 
 fn params_install() -> Value {
     schema_object(&[
-        param("mbr", "string", true, "Path to stage1 MBR binary (512 bytes)"),
         param(
-            "stage2",
+            "mbr",
             "string",
             true,
-            "Path to stage2 binary",
+            "Path to stage1 MBR binary (512 bytes)",
         ),
-        param(
-            "target",
-            "string",
-            true,
-            "Target device or image file",
-        ),
+        param("stage2", "string", true, "Path to stage2 binary"),
+        param("target", "string", true, "Target device or image file"),
         param_with_default(
             "stage2-lba",
             "integer",
@@ -216,14 +206,12 @@ fn params_sbom() -> Value {
 }
 
 fn params_schema() -> Value {
-    schema_object(&[
-        param(
-            "command",
-            "string",
-            false,
-            "Emit schema for this specific sub-command (omit for the full tool schema)",
-        ),
-    ])
+    schema_object(&[param(
+        "command",
+        "string",
+        false,
+        "Emit schema for this specific sub-command (omit for the full tool schema)",
+    )])
 }
 
 fn params_describe() -> Value {
@@ -243,24 +231,32 @@ fn params_completions() -> Value {
 // ---------- output ----------
 
 fn output_install() -> Value {
-    shape_object("object", "Install result", &[
-        ("mbr_bytes_written", "integer"),
-        ("stage2_bytes_written", "integer"),
-        ("stage2_sectors", "integer"),
-        ("stage2_lba", "integer"),
-        ("target", "string"),
-        ("dry_run", "boolean"),
-    ])
+    shape_object(
+        "object",
+        "Install result",
+        &[
+            ("mbr_bytes_written", "integer"),
+            ("stage2_bytes_written", "integer"),
+            ("stage2_sectors", "integer"),
+            ("stage2_lba", "integer"),
+            ("target", "string"),
+            ("dry_run", "boolean"),
+        ],
+    )
 }
 
 fn output_enroll() -> Value {
-    shape_object("object", "Enrollment result", &[
-        ("config", "string"),
-        ("efi", "string"),
-        ("blake2b_256", "string"),
-        ("patch_offset", "integer"),
-        ("dry_run", "boolean"),
-    ])
+    shape_object(
+        "object",
+        "Enrollment result",
+        &[
+            ("config", "string"),
+            ("efi", "string"),
+            ("blake2b_256", "string"),
+            ("patch_offset", "integer"),
+            ("dry_run", "boolean"),
+        ],
+    )
 }
 
 fn output_sbom() -> Value {
@@ -287,9 +283,7 @@ fn output_completions() -> Value {
 
 fn examples_install() -> Value {
     Value::Array(vec![
-        Value::str(
-            "zamak install --mbr mbr.bin --stage2 stage2.bin --target disk.img",
-        ),
+        Value::str("zamak install --mbr mbr.bin --stage2 stage2.bin --target disk.img"),
         Value::str(
             "zamak install --mbr mbr.bin --stage2 stage2.bin --target disk.img --json --dry-run",
         ),
@@ -321,9 +315,7 @@ fn examples_schema() -> Value {
 fn examples_describe() -> Value {
     Value::Array(vec![
         Value::str("zamak describe --json"),
-        Value::str(
-            "zamak describe --json | jq '.commands[] | select(.destructive)'",
-        ),
+        Value::str("zamak describe --json | jq '.commands[] | select(.destructive)'"),
     ])
 }
 
@@ -336,7 +328,12 @@ fn examples_completions() -> Value {
 
 // ---------- helpers ----------
 
-fn param(name: &'static str, ty: &'static str, required: bool, desc: &'static str) -> (String, Value) {
+fn param(
+    name: &'static str,
+    ty: &'static str,
+    required: bool,
+    desc: &'static str,
+) -> (String, Value) {
     (
         name.to_string(),
         obj([
@@ -388,16 +385,17 @@ fn schema_object(props: &[(String, Value)]) -> Value {
     Value::Object(
         [
             ("type".to_string(), Value::str("object")),
-            (
-                "properties".to_string(),
-                Value::Object(props.to_vec()),
-            ),
+            ("properties".to_string(), Value::Object(props.to_vec())),
         ]
         .to_vec(),
     )
 }
 
-fn shape_object(ty: &'static str, desc: &'static str, fields: &[(&'static str, &'static str)]) -> Value {
+fn shape_object(
+    ty: &'static str,
+    desc: &'static str,
+    fields: &[(&'static str, &'static str)],
+) -> Value {
     let props: Vec<(String, Value)> = fields
         .iter()
         .map(|(n, t)| ((*n).to_string(), obj([("type", Value::str(*t))])))
@@ -419,7 +417,14 @@ mod tests {
 
     #[test]
     fn every_command_has_a_spec() {
-        for name in ["install", "enroll-config", "sbom", "schema", "describe", "completions"] {
+        for name in [
+            "install",
+            "enroll-config",
+            "sbom",
+            "schema",
+            "describe",
+            "completions",
+        ] {
             assert!(find(name).is_some(), "no spec for {name}");
         }
     }

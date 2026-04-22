@@ -53,12 +53,12 @@ pub fn run(
             }
             "--stage2-lba" => {
                 i += 1;
-                let s = args.get(i).ok_or_else(|| {
-                    CliError::usage("install: --stage2-lba requires a value")
-                })?;
-                stage2_lba = s.parse().map_err(|_| {
-                    CliError::usage(format!("install: invalid LBA value '{s}'"))
-                })?;
+                let s = args
+                    .get(i)
+                    .ok_or_else(|| CliError::usage("install: --stage2-lba requires a value"))?;
+                stage2_lba = s
+                    .parse()
+                    .map_err(|_| CliError::usage(format!("install: invalid LBA value '{s}'")))?;
             }
             other => {
                 return Err(CliError::usage(format!(
@@ -69,8 +69,7 @@ pub fn run(
         i += 1;
     }
 
-    let mbr_path =
-        mbr_path.ok_or_else(|| CliError::usage("install: --mbr is required"))?;
+    let mbr_path = mbr_path.ok_or_else(|| CliError::usage("install: --mbr is required"))?;
     let stage2_path =
         stage2_path.ok_or_else(|| CliError::usage("install: --stage2 is required"))?;
     let target_path =
@@ -118,7 +117,10 @@ pub fn run(
     let data = obj([
         ("target", Value::str(target_path)),
         ("mbr_bytes_written", Value::UInt(SECTOR_SIZE as u64)),
-        ("stage2_bytes_written", Value::UInt(stage2_data.len() as u64)),
+        (
+            "stage2_bytes_written",
+            Value::UInt(stage2_data.len() as u64),
+        ),
         ("stage2_sectors", Value::UInt(stage2_sectors as u64)),
         ("stage2_lba", Value::UInt(stage2_lba as u64)),
         ("dry_run", Value::Bool(globals.dry_run)),

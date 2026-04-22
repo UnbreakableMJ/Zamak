@@ -243,10 +243,7 @@ mod tests {
             ("also_keep", Value::Int(3)),
         ]);
         let kept = o.project(&["keep".into(), "also_keep".into()]);
-        assert_eq!(
-            kept.to_compact(),
-            r#"{"keep":1,"also_keep":3}"#
-        );
+        assert_eq!(kept.to_compact(), r#"{"keep":1,"also_keep":3}"#);
     }
 
     #[test]

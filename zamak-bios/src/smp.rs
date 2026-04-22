@@ -8,9 +8,9 @@
 
 // Rust guideline compliant 2026-03-30
 
+use crate::utils;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use crate::utils;
 use zamak_core::protocol;
 
 #[repr(C, packed)]
@@ -36,7 +36,10 @@ struct MadtEntryHeader {
 
 // §3.9.7: Compile-time layout verification for ACPI MADT structures.
 const _: () = {
-    assert!(core::mem::size_of::<MadtEntryHeader>() == 2, "MadtEntryHeader must be 2 bytes");
+    assert!(
+        core::mem::size_of::<MadtEntryHeader>() == 2,
+        "MadtEntryHeader must be 2 bytes"
+    );
     assert!(core::mem::offset_of!(MadtEntryHeader, entry_type) == 0);
     assert!(core::mem::offset_of!(MadtEntryHeader, length) == 1);
 };
@@ -84,27 +87,21 @@ pub fn parse_madt(rsdp_addr: u64) -> (u32, Vec<Cpu>) {
             lapic_addr = unsafe { (*madt).lapic_addr };
 
             let mut offset = 44; // After fixed MADT header (including flags)
-            // SAFETY: length field in MADT header
+                                 // SAFETY: length field in MADT header
             let madt_len = unsafe { (*madt).length };
 
             while offset < madt_len {
                 // SAFETY: offset < madt_len; entry header is 2 bytes (type + length)
-                let entry = unsafe {
-                    header.add(offset as usize) as *const MadtEntryHeader
-                };
+                let entry = unsafe { header.add(offset as usize) as *const MadtEntryHeader };
                 let entry_type = unsafe { (*entry).entry_type };
                 let entry_len = unsafe { (*entry).length };
 
                 // Type 0 = Processor Local APIC entry.
                 if entry_type == 0 {
                     // SAFETY: Local APIC entry layout: +2 = proc_id, +3 = lapic_id, +4 = flags
-                    let proc_id =
-                        unsafe { *header.add(offset as usize + 2) };
-                    let lapic_id =
-                        unsafe { *header.add(offset as usize + 3) };
-                    let flags = unsafe {
-                        *(header.add(offset as usize + 4) as *const u32)
-                    };
+                    let proc_id = unsafe { *header.add(offset as usize + 2) };
+                    let lapic_id = unsafe { *header.add(offset as usize + 3) };
+                    let flags = unsafe { *(header.add(offset as usize + 4) as *const u32) };
 
                     cpus.push(Cpu {
                         processor_id: proc_id,
@@ -129,11 +126,7 @@ pub fn parse_madt(rsdp_addr: u64) -> (u32, Vec<Cpu>) {
 ///
 /// Copies the trampoline code to 0x1000 (within the 1 MiB real-mode
 /// limit), patches the PML4 address, and sends IPIs via the LAPIC.
-pub fn start_aps(
-    lapic_addr: u32,
-    cpus: &[Cpu],
-    pml4: u64,
-) -> Vec<protocol::SmpInfo> {
+pub fn start_aps(lapic_addr: u32, cpus: &[Cpu], pml4: u64) -> Vec<protocol::SmpInfo> {
     let mut smp_infos = Vec::new();
 
     // SAFETY:
@@ -141,8 +134,7 @@ pub fn start_aps(
     //   Postconditions: reads BSP LAPIC ID from LAPIC ID register (offset 0x20)
     //   Clobbers: none
     //   Worst-case: reads wrong LAPIC ID if lapic_addr is invalid
-    let bsp_lapic_id =
-        unsafe { *((lapic_addr + 0x20) as *const u32) >> 24 } as u8;
+    let bsp_lapic_id = unsafe { *((lapic_addr + 0x20) as *const u32) >> 24 } as u8;
 
     // Copy trampoline to below 1 MiB and patch PML4 address.
     let trampoline_bytes = include_bytes!("../../trampoline.bin");

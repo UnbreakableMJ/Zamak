@@ -380,7 +380,14 @@ pub fn draw_menu_with_wallpaper(
                 EditorDiagnosticLevel::Error => (error, "ERR "),
             };
             font.draw_string(canvas, 50, edit_y + 36, prefix, color, Some(edit_bg));
-            font.draw_string(canvas, 90, edit_y + 36, diag.message.as_str(), color, Some(edit_bg));
+            font.draw_string(
+                canvas,
+                90,
+                edit_y + 36,
+                diag.message.as_str(),
+                color,
+                Some(edit_bg),
+            );
         }
     }
 }

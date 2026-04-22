@@ -191,7 +191,11 @@ pub mod x86 {
             spin_wait(1_000);
             let end = rdtsc();
             // On any remotely modern CPU 1000 pauses is ≥ 1000 cycles.
-            assert!(end - start >= 100, "spin_wait elapsed only {} cycles", end - start);
+            assert!(
+                end - start >= 100,
+                "spin_wait elapsed only {} cycles",
+                end - start
+            );
         }
 
         // Miri-only exercises: verify that the stub variants are side-effect-free
@@ -413,7 +417,11 @@ pub mod aarch64 {
         /// Encodes the AP / UXN / PXN bits for a given `Permissions`.
         const fn perm_bits(p: Permissions) -> u64 {
             let mut bits = 0;
-            bits |= if p.writable { PTE_AP_RW_EL1 } else { PTE_AP_RO_EL1 };
+            bits |= if p.writable {
+                PTE_AP_RW_EL1
+            } else {
+                PTE_AP_RO_EL1
+            };
             if !p.executable {
                 bits |= PTE_PXN | PTE_UXN;
             }
@@ -447,8 +455,11 @@ pub mod aarch64 {
         /// reference to the allocator and a `&mut` mapping into all
         /// allocated frames (via the HHDM — `identity_to_virt` converts
         /// a physical page address into a writable slice).
-        pub struct PageTableBuilder<'a, A: FrameAllocator, F: FnMut(u64) -> &'a mut [u64; ENTRIES_PER_TABLE]>
-        {
+        pub struct PageTableBuilder<
+            'a,
+            A: FrameAllocator,
+            F: FnMut(u64) -> &'a mut [u64; ENTRIES_PER_TABLE],
+        > {
             pub allocator: A,
             /// Given a physical page address, returns a mutable slice to
             /// its 512 entries through the bootloader's HHDM.
@@ -591,7 +602,7 @@ pub mod aarch64 {
                 assert_ne!(attrs & PTE_VALID, 0);
                 assert_ne!(attrs & PTE_AF, 0);
                 assert_ne!(attrs & PTE_PAGE, 0); // L3 page
-                // Executable: UXN+PXN should be clear.
+                                                 // Executable: UXN+PXN should be clear.
                 assert_eq!(attrs & (PTE_UXN | PTE_PXN), 0);
             }
 
@@ -641,11 +652,7 @@ pub mod aarch64 {
                 assert_eq!(plan.mappings.len(), 3);
                 // Ensure `leaf_attrs` on the framebuffer mapping yields
                 // write-combining (MAIR index 1).
-                let fb_attrs = leaf_attrs(
-                    plan.mappings[2].perms,
-                    plan.mappings[2].cache,
-                    true,
-                );
+                let fb_attrs = leaf_attrs(plan.mappings[2].perms, plan.mappings[2].cache, true);
                 assert_eq!((fb_attrs >> 2) & 0x7, 1);
             }
         }
@@ -1114,7 +1121,11 @@ pub mod riscv64 {
             fn alloc_frame(&mut self) -> Option<u64>;
         }
 
-        pub struct PageTableBuilder<'a, A: FrameAllocator, F: FnMut(u64) -> &'a mut [u64; ENTRIES_PER_TABLE]> {
+        pub struct PageTableBuilder<
+            'a,
+            A: FrameAllocator,
+            F: FnMut(u64) -> &'a mut [u64; ENTRIES_PER_TABLE],
+        > {
             pub allocator: A,
             pub phys_to_table: F,
             root: u64,
@@ -1131,7 +1142,11 @@ pub mod riscv64 {
                 for e in t.iter_mut() {
                     *e = 0;
                 }
-                Some(Self { allocator, phys_to_table, root })
+                Some(Self {
+                    allocator,
+                    phys_to_table,
+                    root,
+                })
             }
 
             /// Returns the root (VPN[3] table) physical address.
@@ -1283,8 +1298,8 @@ pub mod loongarch64 {
     /// the Linux-style `0x8000_0000_0000_0000` HHDM base to physical 0.
     #[derive(Debug, Clone, Copy)]
     pub struct Dmw {
-        pub vseg: u8,         // Virtual segment (bits 63:60)
-        pub mat: u8,          // Memory access type (0 = WB, 1 = UC, etc.)
+        pub vseg: u8,           // Virtual segment (bits 63:60)
+        pub mat: u8,            // Memory access type (0 = WB, 1 = UC, etc.)
         pub plv0_allowed: bool, // Supervisor access allowed
         pub plv3_allowed: bool, // User access allowed
     }
@@ -1561,7 +1576,11 @@ pub mod loongarch64 {
             fn alloc_frame(&mut self) -> Option<u64>;
         }
 
-        pub struct PageTableBuilder<'a, A: FrameAllocator, F: FnMut(u64) -> &'a mut [u64; ENTRIES_PER_TABLE]> {
+        pub struct PageTableBuilder<
+            'a,
+            A: FrameAllocator,
+            F: FnMut(u64) -> &'a mut [u64; ENTRIES_PER_TABLE],
+        > {
             pub allocator: A,
             pub phys_to_table: F,
             root: u64,
@@ -1578,7 +1597,11 @@ pub mod loongarch64 {
                 for e in t.iter_mut() {
                     *e = 0;
                 }
-                Some(Self { allocator, phys_to_table, root })
+                Some(Self {
+                    allocator,
+                    phys_to_table,
+                    root,
+                })
             }
 
             pub fn root(&self) -> u64 {

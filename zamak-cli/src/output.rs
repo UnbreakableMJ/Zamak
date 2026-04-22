@@ -215,11 +215,7 @@ impl OutputPolicy {
 }
 
 /// Resolves the effective format from flags + env (SFRS §4.1).
-fn resolve_format(
-    explicit: Option<Format>,
-    explicit_json: bool,
-    env: &EnvSnapshot,
-) -> Format {
+fn resolve_format(explicit: Option<Format>, explicit_json: bool, env: &EnvSnapshot) -> Format {
     // 1. Explicit flag wins.
     if let Some(f) = explicit {
         return f;
@@ -306,7 +302,9 @@ pub fn emit_info(policy: &OutputPolicy, msg: &str) {
             eprintln!("{}", v.to_compact());
         }
         _ => {
-            let p = Palette { color: policy.color };
+            let p = Palette {
+                color: policy.color,
+            };
             let ts = crate::time::iso8601_now();
             let tag = p.paint(Palette::STEEL_BLUE, "[INFO]");
             eprintln!("{ts} {tag} {msg}");
@@ -326,7 +324,9 @@ pub fn emit_warn(policy: &OutputPolicy, msg: &str) {
             eprintln!("{}", v.to_compact());
         }
         _ => {
-            let p = Palette { color: policy.color };
+            let p = Palette {
+                color: policy.color,
+            };
             let ts = crate::time::iso8601_now();
             let tag = p.paint(Palette::MOLTEN_AMBER, "[WARN]");
             eprintln!("{ts} {tag} {msg}");
@@ -527,9 +527,7 @@ mod tests {
     fn pipe_defaults_to_json() {
         let mut e = base_env();
         e.stdout_is_tty = false;
-        let p = OutputPolicy::resolve(
-            None, false, ColorMode::Auto, false, false, None, false, &e,
-        );
+        let p = OutputPolicy::resolve(None, false, ColorMode::Auto, false, false, None, false, &e);
         assert_eq!(p.format, Format::Json);
         assert!(!p.color);
     }
@@ -556,9 +554,7 @@ mod tests {
     fn no_color_env_overrides_auto() {
         let mut e = base_env();
         e.no_color = true;
-        let p = OutputPolicy::resolve(
-            None, false, ColorMode::Auto, false, false, None, false, &e,
-        );
+        let p = OutputPolicy::resolve(None, false, ColorMode::Auto, false, false, None, false, &e);
         assert!(!p.color);
     }
 
@@ -567,9 +563,7 @@ mod tests {
         let mut e = base_env();
         e.no_color = true;
         e.force_color = true;
-        let p = OutputPolicy::resolve(
-            None, false, ColorMode::Auto, false, false, None, false, &e,
-        );
+        let p = OutputPolicy::resolve(None, false, ColorMode::Auto, false, false, None, false, &e);
         assert!(p.color, "FORCE_COLOR overrides NO_COLOR (§4.4)");
     }
 

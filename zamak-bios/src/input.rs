@@ -7,7 +7,7 @@
 
 // Rust guideline compliant 2026-03-30
 
-use zamak_core::arch::x86::{inb};
+use zamak_core::arch::x86::inb;
 use zamak_core::tui::{InputSource, Key};
 
 /// PS/2 keyboard controller status port.
@@ -35,7 +35,7 @@ impl InputSource for BiosInput {
             0x50 => Key::Down,
             0x1C => Key::Enter,
             0x01 => Key::Esc,
-            0x12 => Key::Edit,      // 'e'
+            0x12 => Key::Edit, // 'e'
             0x17 => Key::Char('i'),
             0x1E => Key::Char('a'),
             0x30 => Key::Char('b'),

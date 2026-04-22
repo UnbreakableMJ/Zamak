@@ -85,8 +85,9 @@ pub mod x86 {
     pub fn build(boot_services: &BootServices, kernel: &crate::LoadedKernel) -> u64 {
         let mut alloc = UefiFrameAlloc(boot_services);
 
-        let pml4_frame = <UefiFrameAlloc<'_> as FrameAllocator<Size4KiB>>::allocate_frame(&mut alloc)
-            .expect("allocate PML4 frame");
+        let pml4_frame =
+            <UefiFrameAlloc<'_> as FrameAllocator<Size4KiB>>::allocate_frame(&mut alloc)
+                .expect("allocate PML4 frame");
         let pml4_ptr = pml4_frame.start_address().as_u64() as *mut PageTable;
         // SAFETY: frame is UEFI-allocated, page-aligned, owned here.
         unsafe {

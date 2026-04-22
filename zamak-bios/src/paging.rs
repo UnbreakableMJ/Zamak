@@ -166,8 +166,7 @@ pub fn setup_paging(
 
 /// Allocates a zeroed, 4 KiB-aligned page for use as a page table.
 fn allocate_page() -> *mut u64 {
-    let layout = Layout::from_size_align(4096, 4096)
-        .expect("page layout is valid");
+    let layout = Layout::from_size_align(4096, 4096).expect("page layout is valid");
 
     // SAFETY:
     //   Preconditions: layout is non-zero size with valid alignment

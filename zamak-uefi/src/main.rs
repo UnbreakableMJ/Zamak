@@ -164,7 +164,9 @@ fn load_kernel_segments(
 
 fn read_file(file: &mut uefi::proto::media::file::RegularFile) -> Vec<u8> {
     let mut i_buffer = [0u8; 256];
-    let info: &FileInfo = file.get_info(&mut i_buffer).expect("Failed to get file info");
+    let info: &FileInfo = file
+        .get_info(&mut i_buffer)
+        .expect("Failed to get file info");
     let size = info.file_size() as usize;
     let mut data = vec![0; size];
     file.read(&mut data).expect("Failed to read file");
@@ -195,7 +197,8 @@ fn fulfill_requests(
             protocol::BOOTLOADER_INFO_ID => {
                 let response = Box::leak(Box::new(protocol::BootloaderInfoResponse {
                     name: Box::leak(Box::new("Zamak\0")).as_ptr() as u64,
-                    version: Box::leak(Box::new(concat!(env!("CARGO_PKG_VERSION"), "\0"))).as_ptr() as u64,
+                    version: Box::leak(Box::new(concat!(env!("CARGO_PKG_VERSION"), "\0"))).as_ptr()
+                        as u64,
                 }));
                 req.response = response as *mut _ as u64;
                 info!("  -> Fulfilled BOOTLOADER_INFO");
@@ -402,8 +405,7 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                 };
 
                 let config_data = read_file(&mut file);
-                let config_str =
-                    core::str::from_utf8(&config_data).expect("Config is not UTF-8");
+                let config_str = core::str::from_utf8(&config_data).expect("Config is not UTF-8");
                 let config = config::parse(config_str);
 
                 // Detect network-boot context.
@@ -466,10 +468,13 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                     let font = PsfFont::parse(DEFAULT_FONT).unwrap();
                     let mut canvas = Canvas::new(&mut fb_struct);
 
-                    let st_ptr = (&system_table as *const SystemTable<Boot>)
-                        as *mut SystemTable<Boot>;
+                    let st_ptr =
+                        (&system_table as *const SystemTable<Boot>) as *mut SystemTable<Boot>;
                     let stdin = unsafe { (*st_ptr).stdin() };
-                    let mut input = UefiInput { stdin, boot_services };
+                    let mut input = UefiInput {
+                        stdin,
+                        boot_services,
+                    };
 
                     let theme_variant = ThemeVariant::parse(&config.theme_variant);
                     let theme = Theme::default().with_variant(theme_variant);
@@ -517,8 +522,7 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                                     state.selected_idx += 1;
                                 }
                             }
-                            zamak_core::tui::Key::Edit
-                            | zamak_core::tui::Key::Char('i') => {
+                            zamak_core::tui::Key::Edit | zamak_core::tui::Key::Char('i') => {
                                 state.editing = !state.editing;
                                 if state.editing {
                                     state.edit_buffer = alloc::string::String::from(
@@ -564,8 +568,7 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                     let u_path = uefi::CStr16::from_u16_with_nul(&path_buf[..i + 1])
                         .expect("Failed to create CStr16");
 
-                    if let Ok(k_handle) =
-                        root.open(u_path, FileMode::Read, FileAttribute::empty())
+                    if let Ok(k_handle) = root.open(u_path, FileMode::Read, FileAttribute::empty())
                     {
                         let mut k_file = match k_handle.into_type().expect("file type") {
                             uefi::proto::media::file::FileType::Regular(f) => f,
@@ -609,10 +612,9 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                                 mod_path_buf[mi] = c as u16;
                                 mi += 1;
                             }
-                            let u_mod_path = uefi::CStr16::from_u16_with_nul(
-                                &mod_path_buf[..mi + 1],
-                            )
-                            .expect("CStr16 for module");
+                            let u_mod_path =
+                                uefi::CStr16::from_u16_with_nul(&mod_path_buf[..mi + 1])
+                                    .expect("CStr16 for module");
                             if let Ok(m_handle) =
                                 root.open(u_mod_path, FileMode::Read, FileAttribute::empty())
                             {
@@ -668,9 +670,8 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                                 let mut smp_infos = Vec::new();
                                 let mut bsp_lapic_id = 0;
                                 for i in 0..total_cpus {
-                                    let info = mp
-                                        .get_processor_info(i)
-                                        .expect("Failed to get CPU info");
+                                    let info =
+                                        mp.get_processor_info(i).expect("Failed to get CPU info");
                                     if info.is_bsp() {
                                         bsp_lapic_id = info.location.package as u32;
                                     }

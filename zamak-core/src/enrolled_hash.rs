@@ -102,10 +102,7 @@ pub enum PatchError {
 }
 
 /// Overwrites the hash slot in a mutable binary buffer.
-pub fn patch_hash(
-    binary: &mut [u8],
-    hash: &[u8; ENROLLED_HASH_LEN],
-) -> Result<(), PatchError> {
+pub fn patch_hash(binary: &mut [u8], hash: &[u8; ENROLLED_HASH_LEN]) -> Result<(), PatchError> {
     let offset = find_slot(binary).ok_or(PatchError::SignatureMissing)?;
     let hash_start = offset + 16;
     let hash_end = hash_start + ENROLLED_HASH_LEN;

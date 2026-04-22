@@ -35,10 +35,7 @@ fn zamak() -> Command {
 
 /// Runs the binary and returns (exit_code, stdout_bytes, stderr_bytes).
 fn run(args: &[&str]) -> (i32, Vec<u8>, Vec<u8>) {
-    let out = zamak()
-        .args(args)
-        .output()
-        .expect("failed to invoke zamak");
+    let out = zamak().args(args).output().expect("failed to invoke zamak");
     (out.status.code().unwrap_or(-1), out.stdout, out.stderr)
 }
 
@@ -239,7 +236,14 @@ fn completions_unknown_shell_is_invalid() {
 fn describe_enumerates_every_shipped_command() {
     let (_, out, _) = run(&["describe"]);
     let s = stdout_str(&out);
-    for cmd in ["install", "enroll-config", "sbom", "schema", "describe", "completions"] {
+    for cmd in [
+        "install",
+        "enroll-config",
+        "sbom",
+        "schema",
+        "describe",
+        "completions",
+    ] {
         assert!(
             s.contains(&format!(r#""name":"{cmd}""#)),
             "describe missing '{cmd}': {s}"

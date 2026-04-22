@@ -430,7 +430,10 @@ mod tests {
             reads as u64
         });
         let _ = rng.get_u64();
-        assert_eq!(reads, 65, "TimerJitterRng did not sample the timer 65 times");
+        assert_eq!(
+            reads, 65,
+            "TimerJitterRng did not sample the timer 65 times"
+        );
     }
 
     #[test]
@@ -468,7 +471,10 @@ mod tests {
                 break;
             }
         }
-        assert!(saw_nonzero, "X86KaslrRng yielded 100 zeros — fallback broken");
+        assert!(
+            saw_nonzero,
+            "X86KaslrRng yielded 100 zeros — fallback broken"
+        );
     }
 
     #[test]

@@ -130,7 +130,11 @@ pub fn parse(bytes: &[u8]) -> Result<Bitmap, BmpError> {
         }
     }
 
-    Ok(Bitmap { width, height, pixels })
+    Ok(Bitmap {
+        width,
+        height,
+        pixels,
+    })
 }
 
 /// Draws a wallpaper on the canvas using the given placement style.
@@ -213,7 +217,7 @@ mod tests {
         // Row 0 (bottom): red (0,0,255 BGR), green (0,255,0 BGR)
         bmp.extend_from_slice(&[0, 0, 255, 0, 255, 0]);
         bmp.extend_from_slice(&[0, 0]); // row padding to 8 bytes
-        // Row 1 (top): blue (255,0,0 BGR), white (255,255,255 BGR)
+                                        // Row 1 (top): blue (255,0,0 BGR), white (255,255,255 BGR)
         bmp.extend_from_slice(&[255, 0, 0, 255, 255, 255]);
         bmp.extend_from_slice(&[0, 0]);
 
@@ -277,7 +281,11 @@ mod tests {
 
     // -- `draw` in each style -----------------------------------
 
-    fn mk_fb(width: u64, height: u64, backing: &mut alloc::vec::Vec<u8>) -> crate::protocol::Framebuffer {
+    fn mk_fb(
+        width: u64,
+        height: u64,
+        backing: &mut alloc::vec::Vec<u8>,
+    ) -> crate::protocol::Framebuffer {
         let bpp: u64 = 32;
         let pitch = width * (bpp / 8);
         let size = (pitch * height) as usize;
@@ -300,12 +308,24 @@ mod tests {
 
     fn solid_bitmap(width: u32, height: u32, color: Color) -> Bitmap {
         let pixels = alloc::vec![color; (width * height) as usize];
-        Bitmap { width, height, pixels }
+        Bitmap {
+            width,
+            height,
+            pixels,
+        }
     }
 
     #[test]
     fn draw_tiled_fills_entire_canvas() {
-        let bmp = solid_bitmap(3, 3, Color { r: 0x11, g: 0x22, b: 0x33 });
+        let bmp = solid_bitmap(
+            3,
+            3,
+            Color {
+                r: 0x11,
+                g: 0x22,
+                b: 0x33,
+            },
+        );
         let mut backing = alloc::vec::Vec::new();
         let mut fb = mk_fb(8, 8, &mut backing);
         let mut canvas = Canvas::new(&mut fb);
@@ -321,7 +341,15 @@ mod tests {
 
     #[test]
     fn draw_centered_only_touches_central_region() {
-        let bmp = solid_bitmap(2, 2, Color { r: 0xFF, g: 0xFF, b: 0xFF });
+        let bmp = solid_bitmap(
+            2,
+            2,
+            Color {
+                r: 0xFF,
+                g: 0xFF,
+                b: 0xFF,
+            },
+        );
         let mut backing = alloc::vec::Vec::new();
         let mut fb = mk_fb(8, 8, &mut backing);
         let mut canvas = Canvas::new(&mut fb);
@@ -341,12 +369,32 @@ mod tests {
     fn draw_stretched_rescales_to_canvas() {
         // Bitmap 2x2 with a known checker pattern.
         let pixels = alloc::vec![
-            Color { r: 0xFF, g: 0, b: 0 }, // top-left
-            Color { r: 0, g: 0xFF, b: 0 }, // top-right
-            Color { r: 0, g: 0, b: 0xFF }, // bottom-left
-            Color { r: 0xFF, g: 0xFF, b: 0xFF }, // bottom-right
+            Color {
+                r: 0xFF,
+                g: 0,
+                b: 0
+            }, // top-left
+            Color {
+                r: 0,
+                g: 0xFF,
+                b: 0
+            }, // top-right
+            Color {
+                r: 0,
+                g: 0,
+                b: 0xFF
+            }, // bottom-left
+            Color {
+                r: 0xFF,
+                g: 0xFF,
+                b: 0xFF
+            }, // bottom-right
         ];
-        let bmp = Bitmap { width: 2, height: 2, pixels };
+        let bmp = Bitmap {
+            width: 2,
+            height: 2,
+            pixels,
+        };
         let mut backing = alloc::vec::Vec::new();
         let mut fb = mk_fb(4, 4, &mut backing);
         let mut canvas = Canvas::new(&mut fb);
@@ -360,7 +408,11 @@ mod tests {
 
     #[test]
     fn draw_stretched_handles_zero_size_bitmap() {
-        let bmp = Bitmap { width: 0, height: 0, pixels: alloc::vec![] };
+        let bmp = Bitmap {
+            width: 0,
+            height: 0,
+            pixels: alloc::vec![],
+        };
         let mut backing = alloc::vec::Vec::new();
         let mut fb = mk_fb(4, 4, &mut backing);
         let mut canvas = Canvas::new(&mut fb);

@@ -121,7 +121,11 @@ fn print_usage() {
     eprintln!();
     eprintln!("suites:");
     for (name, cases) in suites() {
-        eprintln!("  {name:<20} ({} case{})", cases.len(), if cases.len() == 1 { "" } else { "s" });
+        eprintln!(
+            "  {name:<20} ({} case{})",
+            cases.len(),
+            if cases.len() == 1 { "" } else { "s" }
+        );
     }
 }
 
@@ -281,8 +285,7 @@ fn build_qemu_command(test: &TestCase) -> Command {
         }
         BootMode::Uefi => {
             // Assumes OVMF is available at the standard path.
-            let ovmf_dir =
-                std::env::var("OVMF_DIR").unwrap_or_else(|_| "/usr/share/OVMF".into());
+            let ovmf_dir = std::env::var("OVMF_DIR").unwrap_or_else(|_| "/usr/share/OVMF".into());
             cmd.args([
                 "-drive",
                 &format!("if=pflash,format=raw,readonly=on,file={ovmf_dir}/OVMF_CODE.fd"),

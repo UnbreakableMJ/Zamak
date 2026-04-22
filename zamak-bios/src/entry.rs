@@ -32,7 +32,6 @@ use core::arch::global_asm;
 // a full 32→16→real→16→32 mode round-trip to invoke BIOS interrupts.
 global_asm!(
     ".intel_syntax noprefix",
-
     // =========================================================================
     // 16-bit Real Mode Entry
     // =========================================================================
@@ -54,7 +53,6 @@ global_asm!(
     "    mov cr0, eax",
     "",
     "    ljmp 0x08, offset init_32",
-
     // =========================================================================
     // 32-bit Protected Mode Initialization
     // =========================================================================
@@ -75,7 +73,6 @@ global_asm!(
     ".Lhalt:",
     "    hlt",
     "    jmp .Lhalt",
-
     // =========================================================================
     // call_bios_int — Transition to 16-bit real mode, fire BIOS interrupt,
     //                  return to 32-bit protected mode.
@@ -100,7 +97,7 @@ global_asm!(
     "    mov ss, ax",
     "",
     "    mov eax, cr0",
-    "    and eax, 0xFFFFFFFE",     // Clear PE bit
+    "    and eax, 0xFFFFFFFE", // Clear PE bit
     "    mov cr0, eax",
     "",
     "    ljmp 0x00, offset .Lrm",
@@ -112,23 +109,23 @@ global_asm!(
     "    mov ss, ax",
     "    mov sp, 0x7000",
     "",
-    "    mov eax, [ebp + 12]",     // regs pointer
+    "    mov eax, [ebp + 12]", // regs pointer
     "    mov edi, eax",
     "",
-    "    mov eax, [edi + 0]",      // eax
-    "    mov ebx, [edi + 4]",      // ebx
-    "    mov ecx, [edi + 8]",      // ecx
-    "    mov edx, [edi + 12]",     // edx
-    "    mov esi, [edi + 16]",     // esi
+    "    mov eax, [edi + 0]",        // eax
+    "    mov ebx, [edi + 4]",        // ebx
+    "    mov ecx, [edi + 8]",        // ecx
+    "    mov edx, [edi + 12]",       // edx
+    "    mov esi, [edi + 16]",       // esi
     "    push dword ptr [edi + 20]", // push edi temporarily
     "",
-    "    mov al, [ebp + 8]",       // int_no
-    "    mov [.Lint_op + 1], al",  // Self-modifying: patch interrupt number
+    "    mov al, [ebp + 8]",      // int_no
+    "    mov [.Lint_op + 1], al", // Self-modifying: patch interrupt number
     "",
     "    pop edi",
     "",
     ".Lint_op:",
-    "    int 0",                   // Patched at runtime
+    "    int 0", // Patched at runtime
     "",
     "    push edi",
     "    mov edi, [ebp + 12]",
@@ -157,7 +154,6 @@ global_asm!(
     "    popa",
     "    pop ebp",
     "    ret",
-
     // =========================================================================
     // enter_long_mode — Enable PAE, set EFER.LME, load CR3, enable paging,
     //                    far-jump to 64-bit code segment.
@@ -167,32 +163,30 @@ global_asm!(
     // =========================================================================
     ".global enter_long_mode",
     "enter_long_mode:",
-    "    mov eax, [esp + 4]",      // pml4_phys
+    "    mov eax, [esp + 4]", // pml4_phys
     "    mov cr3, eax",
     "",
     "    mov eax, cr4",
-    "    or  eax, (1 << 5)",       // PAE
+    "    or  eax, (1 << 5)", // PAE
     "    mov cr4, eax",
     "",
-    "    mov ecx, 0xC0000080",     // IA32_EFER MSR
+    "    mov ecx, 0xC0000080", // IA32_EFER MSR
     "    rdmsr",
-    "    or  eax, (1 << 8)",       // LME bit
+    "    or  eax, (1 << 8)", // LME bit
     "    wrmsr",
     "",
     "    mov eax, cr0",
-    "    or  eax, (1 << 31)",      // PG bit
+    "    or  eax, (1 << 31)", // PG bit
     "    mov cr0, eax",
     "",
     "    ljmp 0x28, offset init_64",
-
     // =========================================================================
     // 64-bit Long Mode Entry
     // =========================================================================
     ".code64",
     "init_64:",
-    "    mov rbx, [0x5FF0]",       // Entry point stored here by Rust
+    "    mov rbx, [0x5FF0]", // Entry point stored here by Rust
     "    jmp rbx",
-
     // =========================================================================
     // GDT — Global Descriptor Table
     // =========================================================================
@@ -209,7 +203,6 @@ global_asm!(
     "gdt_descriptor:",
     "    .word gdt_end - gdt_start - 1",
     "    .long gdt_start",
-
     // =========================================================================
     // Data
     // =========================================================================
@@ -217,6 +210,5 @@ global_asm!(
     ".align 4",
     "esp_save_ptr:",
     "    .long 0",
-
     ".att_syntax prefix",
 );

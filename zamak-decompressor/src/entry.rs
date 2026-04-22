@@ -36,7 +36,6 @@ use core::arch::global_asm;
 //     - Triple fault if segments are invalid or load address is wrong
 global_asm!(
     ".intel_syntax noprefix",
-
     ".section .entry, \"ax\"",
     ".code32",
     ".global _start",
@@ -44,10 +43,10 @@ global_asm!(
     "    cld",
     "",
     // Save register arguments before BSS zeroing clobbers ECX.
-    "    push ebx",           // PXE flag
-    "    push edx",           // boot drive
-    "    push ecx",           // compressed size
-    "    push esi",           // compressed data pointer
+    "    push ebx", // PXE flag
+    "    push edx", // boot drive
+    "    push ecx", // compressed size
+    "    push esi", // compressed data pointer
     "",
     // Zero out BSS.
     "    xor eax, eax",
@@ -64,6 +63,5 @@ global_asm!(
     ".Lhalt:",
     "    hlt",
     "    jmp .Lhalt",
-
     ".att_syntax prefix",
 );

@@ -106,18 +106,12 @@ fn run(argv: &[String]) -> Outcome {
             print_help();
             Ok(0)
         }
-        "install" => run_data_cmd(
-            "install",
-            &policy,
-            cmdline.clone(),
-            || commands::install::run(&sub_args, &policy, &globals, &env),
-        ),
-        "enroll-config" => run_data_cmd(
-            "enroll-config",
-            &policy,
-            cmdline.clone(),
-            || commands::enroll_config::run(&sub_args, &policy, &globals, &env),
-        ),
+        "install" => run_data_cmd("install", &policy, cmdline.clone(), || {
+            commands::install::run(&sub_args, &policy, &globals, &env)
+        }),
+        "enroll-config" => run_data_cmd("enroll-config", &policy, cmdline.clone(), || {
+            commands::enroll_config::run(&sub_args, &policy, &globals, &env)
+        }),
         "sbom" => run_data_cmd("sbom", &policy, cmdline.clone(), || {
             commands::sbom::run(&sub_args, &policy, &globals)
         }),
@@ -167,11 +161,7 @@ fn run_data_cmd(
             fallback.format = output::Format::Json;
             fallback.color = false;
             if let Err(e) = fallback.emit(metadata, data) {
-                return Err((
-                    CliError::from_io("emit envelope", e),
-                    fallback,
-                    cmdline,
-                ));
+                return Err((CliError::from_io("emit envelope", e), fallback, cmdline));
             }
             return Ok(0);
         }
@@ -326,14 +316,18 @@ mod tests {
     #[test]
     fn unknown_subcommand_is_usage_error() {
         let r = run(&["zamak".into(), "bogus".into()]);
-        let Err((e, _, _)) = r else { panic!("expected err") };
+        let Err((e, _, _)) = r else {
+            panic!("expected err")
+        };
         assert_eq!(e.code, error::ErrorCode::UsageError);
     }
 
     #[test]
     fn missing_subcommand_is_usage_error() {
         let r = run(&["zamak".into()]);
-        let Err((e, _, _)) = r else { panic!("expected err") };
+        let Err((e, _, _)) = r else {
+            panic!("expected err")
+        };
         assert_eq!(e.code, error::ErrorCode::UsageError);
     }
 
@@ -351,8 +345,15 @@ mod tests {
 
     #[test]
     fn schema_unknown_command_is_not_found() {
-        let r = run(&["zamak".into(), "schema".into(), "bogus".into(), "--json".into()]);
-        let Err((e, _, _)) = r else { panic!("expected err") };
+        let r = run(&[
+            "zamak".into(),
+            "schema".into(),
+            "bogus".into(),
+            "--json".into(),
+        ]);
+        let Err((e, _, _)) = r else {
+            panic!("expected err")
+        };
         assert_eq!(e.code, error::ErrorCode::NotFound);
     }
 
@@ -366,7 +367,9 @@ mod tests {
     #[test]
     fn completions_unknown_shell_is_invalid() {
         let r = run(&["zamak".into(), "completions".into(), "xonsh".into()]);
-        let Err((e, _, _)) = r else { panic!("expected err") };
+        let Err((e, _, _)) = r else {
+            panic!("expected err")
+        };
         assert_eq!(e.code, error::ErrorCode::InvalidArgument);
     }
 

@@ -70,22 +70,16 @@ mod tests {
     /// START_MARKER, one request whose first 16 bytes are
     /// COMMON_MAGIC, END_MARKER, trailing noise.
     fn mk_image_with_one_request() -> alloc::vec::Vec<u8> {
-        let start = unsafe {
-            core::slice::from_raw_parts(START_MARKER.as_ptr().cast::<u8>(), 32)
-        };
-        let end = unsafe {
-            core::slice::from_raw_parts(END_MARKER.as_ptr().cast::<u8>(), 16)
-        };
-        let magic = unsafe {
-            core::slice::from_raw_parts(COMMON_MAGIC.as_ptr().cast::<u8>(), 16)
-        };
+        let start = unsafe { core::slice::from_raw_parts(START_MARKER.as_ptr().cast::<u8>(), 32) };
+        let end = unsafe { core::slice::from_raw_parts(END_MARKER.as_ptr().cast::<u8>(), 16) };
+        let magic = unsafe { core::slice::from_raw_parts(COMMON_MAGIC.as_ptr().cast::<u8>(), 16) };
 
         let mut img = alloc::vec::Vec::new();
         img.extend_from_slice(&[0xAAu8; 64]); // noise
-        img.extend_from_slice(start);         // start marker
-        img.extend_from_slice(magic);         // common magic
-        img.extend_from_slice(&[0u8; 16]);    // request id continuation
-        img.extend_from_slice(end);           // end marker
+        img.extend_from_slice(start); // start marker
+        img.extend_from_slice(magic); // common magic
+        img.extend_from_slice(&[0u8; 16]); // request id continuation
+        img.extend_from_slice(end); // end marker
         img.extend_from_slice(&[0xFFu8; 64]); // noise
         img
     }
@@ -113,12 +107,8 @@ mod tests {
     fn scan_requests_stops_at_end_marker() {
         // Same shape as mk_image_with_one_request but with NO common
         // magic between the markers — should return zero requests.
-        let start = unsafe {
-            core::slice::from_raw_parts(START_MARKER.as_ptr().cast::<u8>(), 32)
-        };
-        let end = unsafe {
-            core::slice::from_raw_parts(END_MARKER.as_ptr().cast::<u8>(), 16)
-        };
+        let start = unsafe { core::slice::from_raw_parts(START_MARKER.as_ptr().cast::<u8>(), 32) };
+        let end = unsafe { core::slice::from_raw_parts(END_MARKER.as_ptr().cast::<u8>(), 16) };
         let mut img = alloc::vec::Vec::new();
         img.extend_from_slice(&[0u8; 32]);
         img.extend_from_slice(start);

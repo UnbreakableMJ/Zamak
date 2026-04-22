@@ -195,8 +195,14 @@ mod tests {
         let mut buf = alloc::vec![0u8; 64];
         let virt_base: u64 = 0xFFFFFFFF80000000;
         let relocs = [
-            Relocation { offset: 8, addend: 0x1234 },
-            Relocation { offset: 32, addend: -16 },
+            Relocation {
+                offset: 8,
+                addend: 0x1234,
+            },
+            Relocation {
+                offset: 32,
+                addend: -16,
+            },
         ];
         unsafe {
             apply_relocations(buf.as_mut_ptr(), virt_base, &relocs);

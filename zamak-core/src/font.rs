@@ -161,7 +161,11 @@ mod tests {
         let mut backing = alloc::vec::Vec::new();
         let mut fb = mk_fb(64, 16, &mut backing);
         let mut canvas = Canvas::new(&mut fb);
-        let white = Color { r: 0xFF, g: 0xFF, b: 0xFF };
+        let white = Color {
+            r: 0xFF,
+            g: 0xFF,
+            b: 0xFF,
+        };
         font.draw_string(&mut canvas, 0, 0, "OK", white, None);
         // At least some pixel should be non-zero — the string drew.
         let hit = backing.iter().take(64 * 16 * 4).any(|&b| b != 0);
@@ -175,7 +179,11 @@ mod tests {
         let mut backing = alloc::vec::Vec::new();
         let mut fb = mk_fb(32, 16, &mut backing);
         let mut canvas = Canvas::new(&mut fb);
-        let white = Color { r: 0xFF, g: 0xFF, b: 0xFF };
+        let white = Color {
+            r: 0xFF,
+            g: 0xFF,
+            b: 0xFF,
+        };
         // x+8 > width, y+h > height — must clip via put_pixel bounds.
         font.draw_char(&mut canvas, 30, 14, 'A', white, None);
     }
@@ -187,8 +195,16 @@ mod tests {
         let mut backing = alloc::vec::Vec::new();
         let mut fb = mk_fb(16, 16, &mut backing);
         let mut canvas = Canvas::new(&mut fb);
-        let fg = Color { r: 0xFF, g: 0xFF, b: 0xFF };
-        let bg = Color { r: 0x10, g: 0x20, b: 0x30 };
+        let fg = Color {
+            r: 0xFF,
+            g: 0xFF,
+            b: 0xFF,
+        };
+        let bg = Color {
+            r: 0x10,
+            g: 0x20,
+            b: 0x30,
+        };
         font.draw_char(&mut canvas, 0, 0, 'A', fg, Some(bg));
         // First pixel (0, 0) is a lit A-pixel in our synthetic font → foreground.
         // Pixel (7, 0) is still in the 8-wide bg rect and not lit → should be bg.
@@ -204,7 +220,11 @@ mod tests {
         let mut backing = alloc::vec::Vec::new();
         let mut fb = mk_fb(16, 16, &mut backing);
         let mut canvas = Canvas::new(&mut fb);
-        let fg = Color { r: 0xFF, g: 0xFF, b: 0xFF };
+        let fg = Color {
+            r: 0xFF,
+            g: 0xFF,
+            b: 0xFF,
+        };
         // Non-ASCII char — must not panic even though our synthetic font
         // has a '?' glyph of all-zeros.
         font.draw_char(&mut canvas, 0, 0, 'é', fg, None);

@@ -44,7 +44,7 @@ pub type RootTableAddr = u64;
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]
 pub unsafe fn jump_to_kernel(root_table: RootTableAddr, entry_point: u64) -> ! {
-    use x86_64::{PhysAddr, structures::paging::PhysFrame};
+    use x86_64::{structures::paging::PhysFrame, PhysAddr};
 
     // SAFETY: Disable interrupts before switching CR3. Any pending IRQs would
     // be handled through the old IDT, which may no longer be mapped.
@@ -67,7 +67,10 @@ pub unsafe fn jump_to_kernel(root_table: RootTableAddr, entry_point: u64) -> ! {
     use zamak_core::arch::aarch64::mmu;
 
     // SAFETY: `msr daifset, #0xF` masks all interrupt sources (D, A, I, F).
-    core::arch::asm!("msr daifset, #0xF", options(nomem, nostack, preserves_flags));
+    core::arch::asm!(
+        "msr daifset, #0xF",
+        options(nomem, nostack, preserves_flags)
+    );
 
     mmu::write_mair_el1(mmu::STANDARD_MAIR);
 
@@ -79,7 +82,7 @@ pub unsafe fn jump_to_kernel(root_table: RootTableAddr, entry_point: u64) -> ! {
         | (0b01 << 26)                             // ORGN1 = WB WA
         | (0b01 << 24)                             // IRGN1 = WB WA
         | (16 << 16)                               // T1SZ = 64-48 = 16
-        | (16);                                    // T0SZ = 16
+        | (16); // T0SZ = 16
     mmu::write_tcr_el1(TCR_VALUE);
 
     mmu::write_ttbr1_el1(root_table);

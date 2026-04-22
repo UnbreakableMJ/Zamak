@@ -80,8 +80,7 @@ fn assert_same(input: &str) {
         panic!("reference model rejected golden input:\n{input}");
     };
     let zamak = zamak_core::config::parse(input);
-    let zamak_names: Vec<String> =
-        zamak.entries.iter().map(|e| e.name.clone()).collect();
+    let zamak_names: Vec<String> = zamak.entries.iter().map(|e| e.name.clone()).collect();
     assert_eq!(
         zamak_names, reference.entries,
         "entry-name differential on input:\n{input}"

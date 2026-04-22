@@ -30,7 +30,6 @@ use core::arch::global_asm;
 // that only work within one assembly section.
 global_asm!(
     ".intel_syntax noprefix",
-
     ".pushsection .mbr, \"ax\"",
     ".code16",
     ".global mbr_start",
@@ -102,19 +101,19 @@ global_asm!(
     // Disk Address Packet (DAP) for INT 13h Extended Read.
     ".align 4",
     ".Ldap:",
-    "    .byte 0x10",          // DAP size (16 bytes)
-    "    .byte 0",             // Reserved
+    "    .byte 0x10", // DAP size (16 bytes)
+    "    .byte 0",    // Reserved
     ".Ldap_count:",
-    "    .word 0",             // Sector count (patched at runtime)
-    "    .word 0x8000",        // Destination offset (Stage 2 load address)
-    "    .word 0x0000",        // Destination segment
+    "    .word 0",      // Sector count (patched at runtime)
+    "    .word 0x8000", // Destination offset (Stage 2 load address)
+    "    .word 0x0000", // Destination segment
     ".Ldap_lba:",
-    "    .quad 1",             // Start LBA (patched at runtime)
+    "    .quad 1", // Start LBA (patched at runtime)
     "",
     // Patchable fields at fixed MBR offsets.
     // The `zamak install` CLI patches these after writing the MBR.
     ".org 440",                // Offset 440: stage2 location
-    ".Lstage2_lba:  .long 1", // LBA of Stage 2 (patched by installer)
+    ".Lstage2_lba:  .long 1",  // LBA of Stage 2 (patched by installer)
     ".Lstage2_size: .word 32", // Size in sectors (patched by installer)
     "",
     // Partition table area (offset 446, 64 bytes).
@@ -123,7 +122,6 @@ global_asm!(
     "",
     // Boot signature at offset 510.
     ".word 0xAA55",
-
     ".popsection",
     ".att_syntax prefix",
 );

@@ -8,13 +8,11 @@
 
 // Rust guideline compliant 2026-03-30
 
-use crate::{BiosRegs, call_bios_int};
+use crate::{call_bios_int, BiosRegs};
 use alloc::vec::Vec;
 use zamak_core::protocol::{
-    MemmapEntry,
-    MEMMAP_USABLE, MEMMAP_RESERVED,
-    MEMMAP_ACPI_RECLAIMABLE, MEMMAP_ACPI_NVS,
-    MEMMAP_BAD_MEMORY,
+    MemmapEntry, MEMMAP_ACPI_NVS, MEMMAP_ACPI_RECLAIMABLE, MEMMAP_BAD_MEMORY, MEMMAP_RESERVED,
+    MEMMAP_USABLE,
 };
 
 /// SMAP signature returned in EAX on success ('SMAP' in little-endian).
@@ -89,7 +87,10 @@ struct E820Entry {
 
 // §3.9.7: Compile-time layout verification for E820 entry.
 const _: () = {
-    assert!(core::mem::size_of::<E820Entry>() == 24, "E820Entry must be 24 bytes");
+    assert!(
+        core::mem::size_of::<E820Entry>() == 24,
+        "E820Entry must be 24 bytes"
+    );
     assert!(core::mem::offset_of!(E820Entry, base) == 0);
     assert!(core::mem::offset_of!(E820Entry, len) == 8);
     assert!(core::mem::offset_of!(E820Entry, typ) == 16);

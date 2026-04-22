@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Mohamed Hammad
 
-use crate::{BiosRegs, call_bios_int};
+use crate::{call_bios_int, BiosRegs};
 use zamak_core::protocol::Framebuffer;
 
 #[repr(C, packed)]
 pub struct VbeInfoBlock {
-    pub signature: [u8; 4],      // "VESA"
+    pub signature: [u8; 4], // "VESA"
     pub version: u16,
-    pub oem_ptr: u32,            // segment:offset
+    pub oem_ptr: u32, // segment:offset
     pub capabilities: u32,
-    pub video_mode_ptr: u32,     // segment:offset
-    pub total_memory: u16,       // in 64kb blocks
+    pub video_mode_ptr: u32, // segment:offset
+    pub total_memory: u16,   // in 64kb blocks
     pub oem_software_rev: u16,
     pub oem_vendor_name_ptr: u32,
     pub oem_product_name_ptr: u32,
@@ -70,7 +70,11 @@ pub struct VbeModeInfo {
     pub reserved3: [u8; 189],
 }
 
-pub fn find_and_set_vbe_mode(target_width: u16, target_height: u16, target_bpp: u8) -> Option<Framebuffer> {
+pub fn find_and_set_vbe_mode(
+    target_width: u16,
+    target_height: u16,
+    target_bpp: u8,
+) -> Option<Framebuffer> {
     let info_ptr = 0x7000 as *mut VbeInfoBlock;
     let mode_ptr = 0x7200 as *mut VbeModeInfo;
 
@@ -98,7 +102,7 @@ pub fn find_and_set_vbe_mode(target_width: u16, target_height: u16, target_bpp: 
 
     // Iterate modes
     let mut mode_idx_ptr = real_to_flat(info.video_mode_ptr) as *const u16;
-    
+
     while unsafe { *mode_idx_ptr } != 0xFFFF {
         let mode = unsafe { *mode_idx_ptr };
         mode_idx_ptr = unsafe { mode_idx_ptr.offset(1) };
@@ -117,7 +121,7 @@ pub fn find_and_set_vbe_mode(target_width: u16, target_height: u16, target_bpp: 
         }
 
         let minfo = unsafe { &*mode_ptr };
-        
+
         // Check if mode matches
         // Attributes bit 7: Linear Framebuffer
         // Attributes bit 0: Mode supported by hardware
@@ -149,7 +153,7 @@ pub fn find_and_set_vbe_mode(target_width: u16, target_height: u16, target_bpp: 
                 fb.green_mask_shift = minfo.green_field_position;
                 fb.blue_mask_size = minfo.blue_mask_size;
                 fb.blue_mask_shift = minfo.blue_field_position;
-                
+
                 return Some(fb);
             }
         }

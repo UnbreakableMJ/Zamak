@@ -153,7 +153,10 @@ pub fn emit(policy: &OutputPolicy, command: &str, err: &CliError) -> i32 {
         Format::Json | Format::JsonL | Format::Yaml | Format::Csv => {
             let mut inner = vec![
                 ("code".to_string(), Value::str(err.code.as_str())),
-                ("exit_code".to_string(), Value::Int(err.code.exit_code() as i64)),
+                (
+                    "exit_code".to_string(),
+                    Value::Int(err.code.exit_code() as i64),
+                ),
                 ("message".to_string(), Value::str(&err.message)),
                 ("timestamp".to_string(), Value::str(ts)),
                 ("command".to_string(), Value::str(command)),
@@ -174,7 +177,9 @@ pub fn emit(policy: &OutputPolicy, command: &str, err: &CliError) -> i32 {
         }
         _ => {
             // Human-readable.
-            let p = crate::output::Palette { color: policy.color };
+            let p = crate::output::Palette {
+                color: policy.color,
+            };
             let tag = p.paint(crate::output::Palette::RED_OXIDE, "[ERROR]");
             eprintln!("{ts} {tag} {}: {}", err.code.as_str(), err.message);
             if let Some(h) = &err.hint {
@@ -233,7 +238,8 @@ mod tests {
         ] {
             let s = c.as_str();
             assert!(
-                s.chars().all(|c| c.is_ascii_uppercase() || c == '_' || c.is_ascii_digit()),
+                s.chars()
+                    .all(|c| c.is_ascii_uppercase() || c == '_' || c.is_ascii_digit()),
                 "{s} is not UPPER_SNAKE_CASE"
             );
         }

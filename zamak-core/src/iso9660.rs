@@ -274,7 +274,7 @@ mod tests {
     fn parse_directory_record_extracts_file_entry() {
         let mut rec = alloc::vec![0u8; 40];
         rec[0] = 40; // record_len
-        // LBA LE at [2..6].
+                     // LBA LE at [2..6].
         rec[2..6].copy_from_slice(&100u32.to_le_bytes());
         // data size LE at [10..14].
         rec[10..14].copy_from_slice(&512u32.to_le_bytes());
@@ -418,7 +418,9 @@ mod tests {
         assert_eq!(entry.size, 512);
         assert_eq!(entry.file_type, FileType::File);
         let mut buf = alloc::vec![0u8; 512];
-        let n = fs.read_file(&entry, &mut buf).expect("read_file must succeed");
+        let n = fs
+            .read_file(&entry, &mut buf)
+            .expect("read_file must succeed");
         assert_eq!(n, 512);
         assert!(buf.iter().all(|&b| b == 0xAB));
     }
@@ -435,12 +437,7 @@ mod tests {
     fn mount_rejects_non_iso_media() {
         struct BadDev;
         impl BlockDevice for BadDev {
-            fn read_sectors(
-                &self,
-                _s: u64,
-                count: usize,
-                buf: &mut [u8],
-            ) -> Result<(), Error> {
+            fn read_sectors(&self, _s: u64, count: usize, buf: &mut [u8]) -> Result<(), Error> {
                 // Return a buffer whose standard ID is not CD001.
                 for i in 0..count * 2048 {
                     if i < buf.len() {

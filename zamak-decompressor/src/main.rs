@@ -68,24 +68,18 @@ pub unsafe extern "C" fn decompress_and_jump(
     // Initialize the bump allocator for miniz_oxide.
     bump::init();
 
-    let compressed =
-        slice::from_raw_parts(compressed_data, compressed_size as usize);
+    let compressed = slice::from_raw_parts(compressed_data, compressed_size as usize);
 
     // Skip the gzip header to get to the raw deflate stream.
     // Gzip format: 10-byte fixed header, optional extra fields.
     let deflate_data = skip_gzip_header(compressed);
 
     // Decompress the deflate stream.
-    let decompressed = decompress_to_vec_zlib(deflate_data)
-        .unwrap_or_else(|_| halt_with_error());
+    let decompressed = decompress_to_vec_zlib(deflate_data).unwrap_or_else(|_| halt_with_error());
 
     // Copy decompressed data to the target physical address.
     let dest = STAGE3_LOAD_ADDR as *mut u8;
-    core::ptr::copy_nonoverlapping(
-        decompressed.as_ptr(),
-        dest,
-        decompressed.len(),
-    );
+    core::ptr::copy_nonoverlapping(decompressed.as_ptr(), dest, decompressed.len());
 
     // Jump to stage3 with boot_drive and pxe flag as arguments.
     //
@@ -134,8 +128,7 @@ fn skip_gzip_header(data: &[u8]) -> &[u8] {
         if offset + 2 > data.len() {
             return data;
         }
-        let xlen =
-            u16::from_le_bytes([data[offset], data[offset + 1]]) as usize;
+        let xlen = u16::from_le_bytes([data[offset], data[offset + 1]]) as usize;
         offset += 2 + xlen;
     }
 

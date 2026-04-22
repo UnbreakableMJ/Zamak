@@ -152,8 +152,8 @@ impl<'a> Ext2<'a> {
         let bgd = self.get_bgd(group)?;
 
         let _inode_size = self.superblock.rev_level.max(128); // Simplified
-                                                                     // Actually rev 0 is 128 fixed. Rev 1 has inode_size field in superblock.
-                                                                     // For now assume standard 128 or check rev.
+                                                              // Actually rev 0 is 128 fixed. Rev 1 has inode_size field in superblock.
+                                                              // For now assume standard 128 or check rev.
         let actual_inode_size = if self.superblock.rev_level > 0 {
             // We need to read extended superblock field at offset 88.
             // Just hardcode 256 for now as safe bet for modern ext4 or use 128 if rev 0

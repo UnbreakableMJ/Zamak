@@ -44,9 +44,7 @@ pub fn run(
                 output = args.get(i).map(|s| s.as_str());
             }
             other if other.starts_with("--") => {
-                return Err(CliError::usage(format!(
-                    "sbom: unknown option '{other}'"
-                )))
+                return Err(CliError::usage(format!("sbom: unknown option '{other}'")))
             }
             _ => artifacts.push(&args[i]),
         }
@@ -77,14 +75,14 @@ pub fn run(
         ("version", Value::str(version)),
         ("created", Value::str(&timestamp)),
         ("files", Value::Array(files)),
+        ("document_bytes", Value::UInt(document.len() as u64)),
         (
-            "document_bytes",
-            Value::UInt(document.len() as u64),
+            "output",
+            match output {
+                Some(p) => Value::str(p),
+                None => Value::Null,
+            },
         ),
-        ("output", match output {
-            Some(p) => Value::str(p),
-            None => Value::Null,
-        }),
     ]))
 }
 
@@ -108,10 +106,7 @@ fn build_spdx_document(
         let bytes = match fs::read(path) {
             Ok(b) => b,
             Err(e) => {
-                crate::output::emit_warn(
-                    policy,
-                    &format!("sbom: skipping '{path}': {e}"),
-                );
+                crate::output::emit_warn(policy, &format!("sbom: skipping '{path}': {e}"));
                 continue;
             }
         };

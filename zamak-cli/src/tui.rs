@@ -124,10 +124,7 @@ pub fn explore(data: &Value) -> std::io::Result<()> {
         terminal.draw(|f| {
             let layout = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Min(3),
-                    Constraint::Length(1),
-                ])
+                .constraints([Constraint::Min(3), Constraint::Length(1)])
                 .split(f.area());
 
             let accent = Color::Rgb(0x4B, 0x7E, 0xB0);
@@ -135,7 +132,9 @@ pub fn explore(data: &Value) -> std::io::Result<()> {
             let data_color = Color::Rgb(0xD9, 0x8E, 0x32);
 
             let header_style = Style::default().fg(accent).add_modifier(Modifier::BOLD);
-            let sel_style = Style::default().fg(selected).add_modifier(Modifier::REVERSED);
+            let sel_style = Style::default()
+                .fg(selected)
+                .add_modifier(Modifier::REVERSED);
 
             match &view {
                 View::Table { headers, rows } => {
@@ -143,13 +142,13 @@ pub fn explore(data: &Value) -> std::io::Result<()> {
                         .iter()
                         .filter(|row| {
                             filter.is_empty()
-                                || row.iter().any(|c| c.to_lowercase().contains(&filter.to_lowercase()))
+                                || row
+                                    .iter()
+                                    .any(|c| c.to_lowercase().contains(&filter.to_lowercase()))
                         })
                         .collect();
                     if let Some(col) = sort_col {
-                        filtered.sort_by(|a, b| {
-                            a.get(col).cmp(&b.get(col))
-                        });
+                        filtered.sort_by(|a, b| a.get(col).cmp(&b.get(col)));
                     }
                     let widths: Vec<Constraint> = headers
                         .iter()
@@ -193,10 +192,7 @@ pub fn explore(data: &Value) -> std::io::Result<()> {
                                     format!("{k:>18} "),
                                     Style::default().fg(accent).add_modifier(Modifier::BOLD),
                                 ),
-                                Span::styled(
-                                    v.clone(),
-                                    Style::default().fg(data_color),
-                                ),
+                                Span::styled(v.clone(), Style::default().fg(data_color)),
                             ])
                         })
                         .collect();

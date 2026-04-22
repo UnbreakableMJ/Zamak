@@ -6,9 +6,9 @@
 //! envelope, plus any side effects (writes, prints) that its
 //! contract requires.
 
-pub mod install;
+pub mod completions;
+pub mod describe;
 pub mod enroll_config;
+pub mod install;
 pub mod sbom;
 pub mod schema_cmd;
-pub mod describe;
-pub mod completions;

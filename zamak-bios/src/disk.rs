@@ -8,7 +8,7 @@
 
 // Rust guideline compliant 2026-03-30
 
-use crate::{BiosRegs, call_bios_int};
+use crate::{call_bios_int, BiosRegs};
 
 /// Bounce buffer physical address for BIOS disk reads.
 ///
@@ -41,7 +41,10 @@ struct DiskAddressPacket {
 
 // §3.9.7: Compile-time layout verification for INT 13h DAP struct.
 const _: () = {
-    assert!(core::mem::size_of::<DiskAddressPacket>() == 16, "DAP must be 16 bytes");
+    assert!(
+        core::mem::size_of::<DiskAddressPacket>() == 16,
+        "DAP must be 16 bytes"
+    );
     assert!(core::mem::offset_of!(DiskAddressPacket, size) == 0);
     assert!(core::mem::offset_of!(DiskAddressPacket, count) == 2);
     assert!(core::mem::offset_of!(DiskAddressPacket, offset) == 4);
@@ -136,11 +139,7 @@ impl BlockDevice for Disk {
                     return Err(Error::IoError);
                 }
                 let dest_ptr = buffer.as_mut_ptr().add(sectors_read * 512);
-                core::ptr::copy_nonoverlapping(
-                    bounce_buffer,
-                    dest_ptr,
-                    chunk * 512,
-                );
+                core::ptr::copy_nonoverlapping(bounce_buffer, dest_ptr, chunk * 512);
             }
 
             sectors_read += chunk;

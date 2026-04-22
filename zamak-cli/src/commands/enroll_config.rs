@@ -16,12 +16,13 @@ use crate::validate::{confirm_destructive, reject_control_chars};
 /// Signature marking the enrolled-hash slot. Must match
 /// `zamak_core::enrolled_hash::ENROLLED_HASH_SIGNATURE`.
 pub const ENROLLED_HASH_SIGNATURE: [u8; 16] = [
-    b'Z', b'A', b'M', b'A', b'K', b'_', b'C', b'F', b'G', b'_', b'H', b'A', b'S', b'H', 0xA5,
-    0x5A,
+    b'Z', b'A', b'M', b'A', b'K', b'_', b'C', b'F', b'G', b'_', b'H', b'A', b'S', b'H', 0xA5, 0x5A,
 ];
 
 pub fn find_hash_slot(binary: &[u8]) -> Option<usize> {
-    binary.windows(16).position(|w| w == ENROLLED_HASH_SIGNATURE)
+    binary
+        .windows(16)
+        .position(|w| w == ENROLLED_HASH_SIGNATURE)
 }
 
 pub fn run(
@@ -55,15 +56,13 @@ pub fn run(
 
     let config_path =
         config_path.ok_or_else(|| CliError::usage("enroll-config: --config is required"))?;
-    let efi_path =
-        efi_path.ok_or_else(|| CliError::usage("enroll-config: --efi is required"))?;
+    let efi_path = efi_path.ok_or_else(|| CliError::usage("enroll-config: --efi is required"))?;
 
     reject_control_chars("enroll-config --config", config_path)?;
     reject_control_chars("enroll-config --efi", efi_path)?;
 
-    let config_data = fs::read(config_path).map_err(|e| {
-        CliError::from_io(&format!("enroll-config: read '{config_path}'"), e)
-    })?;
+    let config_data = fs::read(config_path)
+        .map_err(|e| CliError::from_io(&format!("enroll-config: read '{config_path}'"), e))?;
     let hash = blake2b_256(&config_data);
     let hex = hex32(&hash);
 
