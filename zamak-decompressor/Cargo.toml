@@ -2,7 +2,7 @@
 
 [package]
 name = "zamak-decompressor"
-version = "0.8.1"
+version = "0.8.2"
 edition = "2021"
 description = "BIOS stage2 decompressor — inflates zamak-bios.sys to a fixed physical address"
 license = "GPL-3.0-or-later"

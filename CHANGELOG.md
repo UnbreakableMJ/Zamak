@@ -12,6 +12,32 @@ All dates use ISO 8601 format (YYYY-MM-DD).
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-04-24
+
+Second release-workflow patch. v0.8.1 successfully published a GH
+Release but only 4 of the expected 9 assets appeared: the
+`flatten` step renamed all files to their inner basenames
+(`zamak-uefi.efi` for every EFI target, `zamak` for every CLI
+target), so `dist/BOOTX64.EFI/zamak-uefi.efi` and
+`dist/BOOTAA64.EFI/zamak-uefi.efi` both became `flat/zamak-uefi.efi`
+and overwrote each other during the move.
+
+### Fixed
+
+- **`release.yml` flatten/rename step** — now walks
+  `dist/<upload-name>/` directories, picks the single inner file
+  per matrix entry, and copies it to `flat/<upload-name>`. So
+  `BOOTX64.EFI`, `BOOTAA64.EFI`, `BOOTRISCV64.EFI`,
+  `BOOTLOONGARCH64.EFI`, `zamak-linux-x86_64`,
+  `zamak-macos-aarch64`, `zamak-freebsd-x86_64` all appear as
+  distinct release assets.
+
+### Note
+
+v0.8.1's GH Release page will stay on the repo for historical
+reference but is incomplete (4/9 assets). Use v0.8.2 as the
+effective "0.8" release point.
+
 ## [0.8.1] - 2026-04-24
 
 Release-workflow patch release. No code changes; fixes

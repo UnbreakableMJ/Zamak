@@ -113,14 +113,24 @@ jobs:
         with:
           path: dist
       - uses: dtolnay/rust-toolchain@stable
-      - name: flatten artifact directories
+      - name: flatten + rename artifact directories
         # Each artifact was uploaded under its own subdir
-        # (dist/<name>/<file>). Flatten to dist/<file> so release
-        # assets have the expected short names.
+        # (dist/<upload-name>/<inner-file>). The inner file has the
+        # generic target name (e.g. `zamak-uefi.efi`, `zamak`), so
+        # multiple entries from the same matrix collapse to the same
+        # name if we just flatten. Rename each to its upload-name so
+        # BOOTX64.EFI, BOOTAA64.EFI, zamak-linux-x86_64, … appear as
+        # distinct GH release assets.
         run: |
           set -euo pipefail
           mkdir -p flat
-          find dist -type f -exec mv {} flat/ \;
+          for dir in dist/*/; do
+            upload_name=$(basename "$dir")
+            inner_file=$(find "$dir" -maxdepth 1 -type f | head -1)
+            if [ -n "$inner_file" ]; then
+              cp "$inner_file" "flat/${upload_name}"
+            fi
+          done
           rm -rf dist
           mv flat dist
           ls -la dist
