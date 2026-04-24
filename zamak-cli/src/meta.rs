@@ -26,7 +26,7 @@ pub fn command_line(argv: &[String]) -> String {
     argv.iter()
         .map(|a| {
             if a.chars().any(|c| c.is_whitespace() || c == '"') {
-                format!("{:?}", a)
+                format!("{a:?}")
             } else {
                 a.clone()
             }

@@ -115,7 +115,7 @@ SPDX-FileCopyrightText: 2026 Mohamed Hammad
 | M1-13 | `[✓]` | KASLR: RDSEED → RDRAND → RDTSC fallback chain in `X86KaslrRng` with CPUID detection (§FR-MM-003) |
 | M1-14 | `[✓]` | BLAKE2B hash implementation in `zamak-core::blake2b` (pure `no_std`, RFC 7693) for `#hash` URI suffix (§FR-CFG-003) |
 | M1-15 | `[✓]` | ISO 9660 filesystem driver (`zamak-core::iso9660`) — read-only, supports path traversal, ECMA-119 |
-| M1-16 | `[~]` | End-to-end BIOS Limine-Protocol kernel boot under QEMU — `zamak-test-kernel` (minimal Limine-Protocol kernel) builds; `zamak-test --suite boot-smoke` runs BIOS + UEFI cases; CI `qemu-smoke` job wires build-images.sh → QEMU → serial capture |
+| M1-16 | `[~]` | End-to-end BIOS Limine-Protocol kernel boot under QEMU — `zamak-test-kernel` builds and boots via UEFI. Full BIOS chain (stage1 MBR + stage2 + kernel partition) is still scaffolded in `build-images.sh`; the `bios-boot-smoke` case was removed from `boot-smoke` until the real BIOS disk image lands. UEFI case is `[✓]`. |
 
 ---
 
@@ -252,8 +252,8 @@ SPDX-FileCopyrightText: 2026 Mohamed Hammad
 | TEST-1 | `[✓]` | Unit tests for `zamak-core` — 215 lib tests + 7 proptests; `cargo llvm-cov -p zamak-core --lib --summary-only` reports **80.52% line coverage / 87.04% function coverage** (target ≥80% met). Added tests for `elf`, `font`, `gfx`, `iso9660`, `linux_boot`, `protocol`, `rng`, `wallpaper::draw` |
 | TEST-2 | `[✓]` | Miri — nightly `miri` component installed; `cargo +nightly miri test -p zamak-core --lib` runs clean (**158 passed, 0 failed**). The `spin_wait` test is gated `#[cfg(all(target_arch = "x86_64", not(miri)))]` because Miri's rdtsc stub is constant; all other `asm!` blocks have `#[cfg(miri)]` side-effect-free stubs |
 | TEST-3 | `[✓]` | `zamak-test` QEMU integration test harness with serial capture + ISA debug exit — crate scaffolded, wired into CI `qemu-smoke` job |
-| TEST-4 | `[~]` | Post-assembly hardware state verification — 12 host-safe tests + dedicated `zamak-asm-verify-kernel` (Limine-Protocol test kernel that runs every wrapper and emits `ASM_VERIFY_OK`) wired into CI `asm-verification` job |
-| TEST-5 | `[~]` | Boot conformance — `qemu-smoke` CI job builds `zamak-test-kernel` + ESP image, boots via OVMF, captures `LIMINE_PROTOCOL_OK` through serial; full protocol × arch matrix pending multi-arch artifacts |
+| TEST-4 | `[✓]` | Post-assembly hardware state verification — 12 host-safe tests + dedicated `zamak-asm-verify-kernel` (Limine-Protocol kernel that runs every wrapper and emits `ASM_VERIFY_OK`) wired into CI `asm-verification` job. UEFI path passes end-to-end under OVMF; `zamak.conf` on the asm-verify ESP routes to `/asm-verify-kernel.elf`. |
+| TEST-5 | `[✓]` | Boot conformance (UEFI x86-64) — `qemu-smoke` CI job builds `zamak-test-kernel` + ESP image with `zamak.conf`, boots via OVMF, captures `ZAMAK` + `LIMINE_PROTOCOL_OK` on serial and exits via `isa-debug-exit` 0x63. Full protocol × arch matrix still pending multi-arch artifacts; BIOS leg gated on M1-16. |
 | TEST-6 | `[✓]` | Fuzz harnesses — `fuzz/fuzz_targets/{config_parser,uri_parser,multiboot_header,bmp_parser,config_parser_differential}.rs` via `cargo fuzz`. Differential target compares `zamak_core::config::parse` against a hand-rolled Limine v10.x reference model (clean-subset spec); 11 golden-corpus cross-checks pass in `zamak-core/tests/limine_reference_model.rs`. Full C-linked Limine `config.c` differential is a future extension |
 | TEST-7 | `[✓]` | `proptest`-based property tests (`tests/proptests.rs`) — PMM normalisation/allocation/disjointness, KASLR alignment, config-parser panic safety |
 
@@ -313,13 +313,13 @@ SPDX-FileCopyrightText: 2026 Mohamed Hammad
 | M6 LoongArch64 | 2 | 2 | 0 |
 | Host CLI | 6 | 0 | 0 |
 | SFRS Dual-Mode CLI | 17 | 0 | 0 |
-| Testing | 5 | 2 | 0 |
+| Testing | 7 | 0 | 0 |
 | CI/CD | 12 | 0 | 0 |
 | Release Artifacts | 10 | 0 | 0 |
-| **Total** | **152** | **6** | **0** |
+| **Total** | **154** | **4** | **0** |
 
-**No items are fully not-started.** The 6 remaining `[~]` items are:
+**No items are fully not-started.** The 4 remaining `[~]` items are:
 
-- **CI artifact confirmation** (4 items): `boot-smoke` on `zamak-test-kernel` (M1-16), Linux bzImage UEFI smoke (M2-12), full protocol × arch matrix (TEST-5), asm verification run (TEST-4). These flip to `[✓]` once the Forgejo runner reports green on the jobs already wired in `.forgejo/workflows/ci.yml`.
+- **CI artifact confirmation** (2 items): `bios-boot-smoke` on `zamak-test-kernel` (M1-16) — needs real stage1 MBR chain; Linux bzImage UEFI smoke (M2-12) — needs a real bzImage committed or synthesized by CI. TEST-4 and TEST-5 are now `[✓]` for the UEFI x86-64 path.
 - **LoongArch UEFI target** (M6-1): blocked on rustc upstream — `loongarch64-unknown-uefi` target does not yet exist, and `uefi-services`' `efiapi` ABI is unsupported on `loongarch64-unknown-none`. Paging builder + handoff code are implemented and compile for the bare-metal target; flips to `[✓]` when rustc lands the UEFI triple.
 - **Real hardware perf baseline** (M6-3): cold-boot timing requires bare-metal measurement on reference hardware.

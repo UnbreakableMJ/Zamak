@@ -553,16 +553,28 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
 
                 if let Some(entry) = config.entries.get(selected_idx) {
                     info!("Booting entry: {}", entry.name);
-                    let kernel_path_str = entry
-                        .options
-                        .get("KERNEL_PATH")
-                        .or(entry.options.get("PATH"))
-                        .expect("No kernel path specified");
+                    // The config parser stores KERNEL_PATH/PATH directly on
+                    // `entry.kernel_path`; only unrecognised keys spill into
+                    // `entry.options`. Fall back to the options map so any
+                    // pre-parser configs (or future renames) still boot.
+                    let kernel_path_str: &str = if !entry.kernel_path.is_empty() {
+                        entry.kernel_path.as_str()
+                    } else {
+                        entry
+                            .options
+                            .get("KERNEL_PATH")
+                            .or(entry.options.get("PATH"))
+                            .map(|s| s.as_str())
+                            .expect("No kernel path specified")
+                    };
 
+                    // UEFI SimpleFileSystem paths use backslash separators.
+                    // Limine-style configs use forward slashes, so translate
+                    // in place while copying into the UTF-16 buffer.
                     let mut path_buf = [0u16; 256];
                     let mut i = 0;
                     for c in kernel_path_str.chars() {
-                        path_buf[i] = c as u16;
+                        path_buf[i] = if c == '/' { '\\' as u16 } else { c as u16 };
                         i += 1;
                     }
                     let u_path = uefi::CStr16::from_u16_with_nul(&path_buf[..i + 1])
@@ -609,7 +621,7 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                             let mut mod_path_buf = [0u16; 256];
                             let mut mi = 0;
                             for c in mod_cfg.path.chars() {
-                                mod_path_buf[mi] = c as u16;
+                                mod_path_buf[mi] = if c == '/' { '\\' as u16 } else { c as u16 };
                                 mi += 1;
                             }
                             let u_mod_path =

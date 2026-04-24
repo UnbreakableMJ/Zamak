@@ -144,6 +144,26 @@ pub mod x86 {
             }
         }
 
+        // Identity-map all physical memory so that the bootloader's own
+        // RIP remains valid immediately after `Cr3::write` in
+        // `handoff::jump_to_kernel`. Without this, the next instruction
+        // after the CR3 load page-faults → triple fault.
+        // UEFI identity-maps the loader image during Boot Services;
+        // we need the SAME identity mapping to persist through the
+        // handoff until the inlined `jmp entry` transfers control to
+        // the kernel at its high-canonical virtual address.
+        for i in 0..num_huge {
+            let pa = i.checked_mul(huge).expect("identity i*huge overflowed");
+            let page: Page<Size2MiB> = Page::containing_address(VirtAddr::new(pa));
+            let frame = PhysFrame::containing_address(PhysAddr::new(pa));
+            unsafe {
+                mapper
+                    .map_to(page, frame, hhdm_flags, &mut alloc)
+                    .expect("map identity huge page")
+                    .ignore();
+            }
+        }
+
         pml4_frame.start_address().as_u64()
     }
 }
