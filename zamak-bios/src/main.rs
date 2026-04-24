@@ -7,13 +7,21 @@
 extern crate alloc;
 
 pub mod allocator;
-pub mod disk;
 pub mod entry;
 pub mod fat32;
 pub mod input;
 pub mod mbr;
-pub mod mmap;
 pub mod paging;
+// The trampoline-dependent BIOS-interrupt callers are only present
+// when the `legacy_trampoline` feature is enabled. M1-16 Path B moves
+// all INT 13h / 15h / 10h calls into real-mode asm before CR0.PE, so
+// the default build no longer needs these modules.
+#[cfg(feature = "legacy_trampoline")]
+pub mod disk;
+#[cfg(feature = "legacy_trampoline")]
+pub mod mmap;
+#[cfg(feature = "legacy_trampoline")]
+pub mod vbe;
 // SMP bring-up and its AP trampoline are temporarily disabled in the
 // BIOS boot path. The trampoline's real-mode asm references in-section
 // labels via 16-bit absolute relocations, which rust-lld cannot resolve
@@ -26,14 +34,17 @@ pub mod smp;
 #[cfg(feature = "smp")]
 pub mod trampoline;
 pub mod utils;
-pub mod vbe;
 
 use core::panic::PanicInfo;
+#[cfg(feature = "legacy_trampoline")]
 use disk::Disk;
+#[cfg(feature = "legacy_trampoline")]
 #[allow(unused_imports)]
 use fat32::Fat32;
+#[cfg(feature = "legacy_trampoline")]
 use mmap::get_memory_map;
 
+#[cfg(feature = "legacy_trampoline")]
 #[repr(C, packed)]
 #[derive(Debug, Default, Clone, Copy)]
 pub struct BiosRegs {
@@ -45,12 +56,21 @@ pub struct BiosRegs {
     pub edi: u32,
 }
 
+#[cfg(feature = "legacy_trampoline")]
 extern "C" {
     fn call_bios_int(int_no: u8, regs: *mut BiosRegs);
+}
+
+extern "C" {
+    // Used by the legacy kmain body and, from Phase 6 onwards, by the
+    // Path B kmain after it consumes the BootDataBundle. Kept
+    // unconditional so the symbol is always present in entry.rs-land.
+    #[allow(dead_code)]
     fn enter_long_mode(pml4_phys: u32, entry_point: u64);
 }
 
 // §3.9.7: Compile-time layout verification for structs accessed by assembly.
+#[cfg(feature = "legacy_trampoline")]
 const _: () = {
     assert!(
         core::mem::size_of::<BiosRegs>() == 24,
@@ -83,11 +103,13 @@ const _: () = {
 };
 
 use alloc::boxed::Box;
+#[cfg(feature = "legacy_trampoline")]
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use zamak_core::protocol;
 
+#[allow(dead_code)]
 fn fulfill_requests(
     mmap: &[protocol::MemmapEntry],
     fb: Option<protocol::Framebuffer>,
@@ -184,7 +206,9 @@ fn fulfill_requests(
     }
 }
 
+#[cfg(feature = "legacy_trampoline")]
 use zamak_core::arch::x86 as arch;
+#[cfg(feature = "legacy_trampoline")]
 use zamak_core::rng::{KaslrRng, X86KaslrRng};
 
 /// Writes a single ASCII byte to COM1 (0x3F8). Used as a boot-progress
@@ -208,6 +232,27 @@ fn mark(b: u8) {
     }
 }
 
+/// Path B stub kmain: the default build.
+///
+/// Called by `init_32` with a pushed u32 argument. In the final Phase 5
+/// wiring this will be the physical address of the `BootDataBundle` at
+/// 0x01000; until those phases land, the stub simply drops a breadcrumb
+/// on COM1 and halts so the scaffolding compiles and boots far enough
+/// to confirm the 16→32 mode switch still works.
+#[cfg(not(feature = "legacy_trampoline"))]
+#[no_mangle]
+pub extern "C" fn kmain(_bundle_phys: u32) -> ! {
+    mark(b'K'); // Path B kmain reached — scaffold stub, halts.
+    loop {
+        // SAFETY: `hlt` on a halted CPU is always safe; loop prevents
+        // falling through if an NMI wakes the CPU.
+        unsafe {
+            core::arch::asm!("hlt", options(nomem, nostack, preserves_flags));
+        }
+    }
+}
+
+#[cfg(feature = "legacy_trampoline")]
 #[no_mangle]
 pub extern "C" fn kmain(drive_id: u8) -> ! {
     mark(b'M'); // kmain entry

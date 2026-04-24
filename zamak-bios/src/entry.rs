@@ -4,9 +4,11 @@
 //! BIOS Stage 2 entry point and CPU mode transition assembly.
 //!
 //! Contains the 16-bit real-mode entry, protected-mode initialization,
-//! BIOS interrupt trampoline (`call_bios_int`), and long-mode transition
-//! (`enter_long_mode`). All assembly resides in `global_asm!` per
-//! Steelbore Standard §3.2.
+//! and long-mode transition (`enter_long_mode`). The legacy
+//! `call_bios_int` 32→real→32 trampoline is gated behind the
+//! `legacy_trampoline` feature (see M1-16 Path B — all BIOS I/O now
+//! happens in real mode before CR0.PE). All assembly resides in
+//! `global_asm!` per Steelbore Standard §3.2.
 
 // Rust guideline compliant 2026-03-30
 
@@ -25,15 +27,15 @@ use core::arch::global_asm;
 //     - All general-purpose registers (entry point, never returns to caller)
 //   Worst-case on violation:
 //     - Triple fault / immediate machine reset
-// §3.9.1 justification: This global_asm! block contains the entire BIOS stage3
-// entry sequence (_start, call_bios_int, enter_long_mode) plus its GDT. These
-// sections share labels and data and must be linked as a single contiguous unit.
-// The call_bios_int function alone requires ~40 instructions because it performs
-// a full 32→16→real→16→32 mode round-trip to invoke BIOS interrupts.
+// §3.9.1 justification: This global_asm! block contains the boot-path
+// skeleton (_start, init_32, enter_long_mode, init_64) plus its GDT.
+// These sections share labels and must be linked as a single contiguous
+// unit starting at the linker-script ORIGIN (0x8000). Splitting them
+// would require duplicating the GDT or introducing position-dependent
+// relocations.
 // NOTE: `global_asm!`'s default on x86 is Intel syntax — no
 // `.intel_syntax`/`.att_syntax` directives here (they became
-// `-D bad_asm_style` on modern rustc and CI runs with
-// `-D warnings`).
+// `-D bad_asm_style` on modern rustc and CI runs with `-D warnings`).
 global_asm!(
     // =========================================================================
     // 16-bit Real Mode Entry
@@ -85,11 +87,70 @@ global_asm!(
     "    hlt",
     "    jmp .Lhalt",
     // =========================================================================
-    // call_bios_int — Transition to 16-bit real mode, fire BIOS interrupt,
-    //                  return to 32-bit protected mode.
+    // enter_long_mode — Enable PAE, set EFER.LME, load CR3, enable paging,
+    //                    far-jump to 64-bit code segment.
     //
-    // C ABI: void call_bios_int(uint8_t int_no, BiosRegs *regs)
+    // C ABI: void enter_long_mode(uint32_t pml4_phys, uint64_t entry_point)
+    //        entry_point must be pre-stored at physical address 0x5FF0.
     // =========================================================================
+    ".global enter_long_mode",
+    "enter_long_mode:",
+    "    mov eax, [esp + 4]", // pml4_phys
+    "    mov cr3, eax",
+    "",
+    "    mov eax, cr4",
+    "    or  eax, (1 << 5)", // PAE
+    "    mov cr4, eax",
+    "",
+    "    mov ecx, 0xC0000080", // IA32_EFER MSR
+    "    rdmsr",
+    "    or  eax, (1 << 8)", // LME bit
+    "    wrmsr",
+    "",
+    "    mov eax, cr0",
+    "    or  eax, (1 << 31)", // PG bit
+    "    mov cr0, eax",
+    "",
+    "    ljmp 0x28, offset init_64",
+    // =========================================================================
+    // 64-bit Long Mode Entry
+    // =========================================================================
+    ".code64",
+    "init_64:",
+    "    mov rbx, [0x5FF0]", // Entry point stored here by Rust
+    "    jmp rbx",
+    // =========================================================================
+    // GDT — Global Descriptor Table
+    // =========================================================================
+    ".align 4",
+    "gdt_start:",
+    "    .quad 0x0000000000000000", // 0x00: Null descriptor
+    "    .quad 0x00cf9a000000ffff", // 0x08: Code 32 (0..4G, P, R, E)
+    "    .quad 0x00cf92000000ffff", // 0x10: Data 32 (0..4G, P, W)
+    "    .quad 0x00009a000000ffff", // 0x18: Code 16 (Real-mode compatible)
+    "    .quad 0x000092000000ffff", // 0x20: Data 16
+    "    .quad 0x00af9a000000ffff", // 0x28: Code 64 (Long Mode)
+    "gdt_end:",
+    "",
+    "gdt_descriptor:",
+    "    .word gdt_end - gdt_start - 1",
+    "    .long gdt_start",
+);
+
+// =========================================================================
+// call_bios_int — legacy 32→16→real→16→32 trampoline.
+//
+// Gated behind the `legacy_trampoline` feature. The default M1-16 Path B
+// build does not include this — all BIOS I/O now happens in real mode
+// before CR0.PE, and protected-mode code consumes pre-populated buffers
+// from the BootDataBundle at phys 0x01000.
+//
+// C ABI: void call_bios_int(uint8_t int_no, BiosRegs *regs)
+// =========================================================================
+#[cfg(feature = "legacy_trampoline")]
+global_asm!(
+    ".section .entry, \"ax\"",
+    ".code32",
     ".global call_bios_int",
     "call_bios_int:",
     "    push ebp",
@@ -165,58 +226,6 @@ global_asm!(
     "    popa",
     "    pop ebp",
     "    ret",
-    // =========================================================================
-    // enter_long_mode — Enable PAE, set EFER.LME, load CR3, enable paging,
-    //                    far-jump to 64-bit code segment.
-    //
-    // C ABI: void enter_long_mode(uint32_t pml4_phys, uint64_t entry_point)
-    //        entry_point must be pre-stored at physical address 0x5FF0.
-    // =========================================================================
-    ".global enter_long_mode",
-    "enter_long_mode:",
-    "    mov eax, [esp + 4]", // pml4_phys
-    "    mov cr3, eax",
-    "",
-    "    mov eax, cr4",
-    "    or  eax, (1 << 5)", // PAE
-    "    mov cr4, eax",
-    "",
-    "    mov ecx, 0xC0000080", // IA32_EFER MSR
-    "    rdmsr",
-    "    or  eax, (1 << 8)", // LME bit
-    "    wrmsr",
-    "",
-    "    mov eax, cr0",
-    "    or  eax, (1 << 31)", // PG bit
-    "    mov cr0, eax",
-    "",
-    "    ljmp 0x28, offset init_64",
-    // =========================================================================
-    // 64-bit Long Mode Entry
-    // =========================================================================
-    ".code64",
-    "init_64:",
-    "    mov rbx, [0x5FF0]", // Entry point stored here by Rust
-    "    jmp rbx",
-    // =========================================================================
-    // GDT — Global Descriptor Table
-    // =========================================================================
-    ".align 4",
-    "gdt_start:",
-    "    .quad 0x0000000000000000", // 0x00: Null descriptor
-    "    .quad 0x00cf9a000000ffff", // 0x08: Code 32 (0..4G, P, R, E)
-    "    .quad 0x00cf92000000ffff", // 0x10: Data 32 (0..4G, P, W)
-    "    .quad 0x00009a000000ffff", // 0x18: Code 16 (Real-mode compatible)
-    "    .quad 0x000092000000ffff", // 0x20: Data 16
-    "    .quad 0x00af9a000000ffff", // 0x28: Code 64 (Long Mode)
-    "gdt_end:",
-    "",
-    "gdt_descriptor:",
-    "    .word gdt_end - gdt_start - 1",
-    "    .long gdt_start",
-    // =========================================================================
-    // Data
-    // =========================================================================
     ".section .data",
     ".align 4",
     "esp_save_ptr:",
