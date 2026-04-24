@@ -356,7 +356,7 @@ mod tests {
         draw(&mut canvas, &bmp, Style::Centered);
         // Bitmap 2×2 centered in 8×8 → offset (3, 3). Pixels (0, 0)
         // and (7, 7) must stay black (zero).
-        let corner = ((0 * 8 + 0) * 4) as usize;
+        let corner = 0usize;
         assert_eq!(&backing[corner..corner + 4], &[0, 0, 0, 0]);
         let far = ((7 * 8 + 7) * 4) as usize;
         assert_eq!(&backing[far..far + 4], &[0, 0, 0, 0]);
@@ -403,7 +403,7 @@ mod tests {
         // quadrant should all be red, blue byte = 0, red byte = 0xFF.
         let p00 = 0;
         assert_eq!(backing[p00 + 2], 0xFF, "red of (0,0)");
-        assert_eq!(backing[p00 + 0], 0, "blue of (0,0)");
+        assert_eq!(backing[p00], 0, "blue of (0,0)");
     }
 
     #[test]

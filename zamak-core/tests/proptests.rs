@@ -32,7 +32,7 @@ impl KaslrRng for SeededRng {
 
 /// Strategy for generating page-aligned, non-overlapping memory regions.
 fn arb_memory_region() -> impl Strategy<Value = MemoryRegion> {
-    (0u64..0x1_0000_0000, 1u64..0x1_000_0000).prop_map(|(base, length)| {
+    (0u64..0x1_0000_0000, 1u64..0x1000_0000).prop_map(|(base, length)| {
         // Align base to page size to avoid trivial rejections.
         let aligned_base = base & !(PAGE_SIZE - 1);
         MemoryRegion {
