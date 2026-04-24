@@ -48,6 +48,10 @@ global_asm!(
     "    mov es, ax",
     "    mov ss, ax",
     "    mov sp, 0x8000",
+    // Print 'Z' to COM1 so we know stage2 reached real-mode entry.
+    "    mov dx, 0x3F8",
+    "    mov al, 'Z'",
+    "    out dx, al",
     "",
     "    lgdt [gdt_descriptor]",
     "",
@@ -67,6 +71,10 @@ global_asm!(
     "    mov fs, ax",
     "    mov gs, ax",
     "    mov ss, ax",
+    // Print 'P' to COM1 so we know the 16→32 mode switch succeeded.
+    "    mov dx, 0x3F8",
+    "    mov al, 'P'",
+    "    out dx, al",
     "",
     "    .extern kmain",
     "    and edx, 0xFF",
