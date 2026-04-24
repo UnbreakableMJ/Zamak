@@ -13,6 +13,7 @@ pub mod fat32;
 pub mod input;
 pub mod mbr;
 pub mod paging;
+pub mod rm_io;
 // The trampoline-dependent BIOS-interrupt callers are only present
 // when the `legacy_trampoline` feature is enabled. M1-16 Path B moves
 // all INT 13h / 15h / 10h calls into real-mode asm before CR0.PE, so
