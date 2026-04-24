@@ -199,4 +199,78 @@ global_asm!(
     "    mov dx, 0x3F8",
     "    out dx, al",
     "    .byte 0xC3",  // 16-bit near ret — see module header
+    // =======================================================================
+    // rm_unreal_enter
+    //
+    // Transition into unreal mode so FS retains a 4 GiB flat descriptor
+    // cache after PE is cleared. DS / ES / SS / CS stay real-mode, so
+    // subsequent INT 13h / 15h / 10h calls continue to work against
+    // their BIOS-friendly segment:offset pairs. Only the FS prefix
+    // (and, transiently, ES during `rm_memcpy_to_high`) crosses the
+    // 1 MiB boundary.
+    //
+    // Uses the existing GDT from entry.rs: selector 0x10 = flat 32-bit
+    // data (base=0, limit=4 GiB, G=1, D/B=1). No new descriptor table
+    // is required.
+    //
+    // In:  nothing.
+    // Out: FS descriptor cache populated with a flat 32-bit data segment.
+    // Clobbers: AX, BX, EAX, flags.
+    // =======================================================================
+    ".global rm_unreal_enter",
+    "rm_unreal_enter:",
+    "    cli",
+    "    lgdt [gdt_descriptor]",
+    "    mov eax, cr0",
+    "    or  eax, 1",
+    "    mov cr0, eax",          // PE on
+    "    mov bx, 0x10",
+    "    mov fs, bx",             // FS cache ← flat 32-bit data descriptor
+    "    and eax, 0xFFFFFFFE",
+    "    mov cr0, eax",           // PE off (FS cache persists)
+    "    sti",
+    "    .byte 0xC3",
+    // =======================================================================
+    // rm_memcpy_to_high
+    //
+    // Copy `ECX` bytes from low-memory source `[DS:ESI]` (DS = 0
+    // assumed by caller) to a 32-bit linear destination `EDI` that may
+    // live above the 1 MiB boundary.
+    //
+    // ES is flipped to the flat 32-bit descriptor for the duration of
+    // the copy (via a transient PE-on/PE-off round trip), then popped
+    // back to its saved real-mode value so the next BIOS call sees the
+    // ES the caller expected.
+    //
+    // In:
+    //   ESI = source linear address (must be < 64 KiB if DS == 0, or
+    //         below the 1 MiB mark — we only ever call this with a
+    //         bounce buffer in low memory).
+    //   EDI = destination linear address (any 32-bit address; usually
+    //         >= 0x0100_0000 for the kernel load buffer).
+    //   ECX = byte count.
+    // Out:
+    //   ESI, EDI, ECX consumed per `rep movsb` semantics.
+    // Clobbers: AX, BX, EAX, flags, DF (cleared by `cld`).
+    // =======================================================================
+    ".global rm_memcpy_to_high",
+    "rm_memcpy_to_high:",
+    "    push es",
+    "    cli",
+    "    mov eax, cr0",
+    "    or  eax, 1",
+    "    mov cr0, eax",          // PE on — required to populate ES cache
+    "    mov bx, 0x10",
+    "    mov es, bx",             // ES cache ← flat 32-bit data
+    "    and eax, 0xFFFFFFFE",
+    "    mov cr0, eax",           // PE off (ES cache persists)
+    "    cld",
+    // `addr32 rep movsb` = 0x67 0xF3 0xA4. Forces 32-bit address size
+    // so the CPU uses ESI / EDI / ECX instead of SI / DI / CX. GAS's
+    // Intel-syntax `addr32` prefix may not parse here, so emit raw.
+    "    .byte 0x67, 0xF3, 0xA4",
+    "    pop es",                 // restore caller's real-mode ES value +
+                                   // 64-KiB limit cache (via real-mode seg load)
+    "    sti",
+    "    .byte 0xC3",
 );
