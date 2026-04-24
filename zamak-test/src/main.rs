@@ -377,6 +377,51 @@ fn start_watchdog(
     (tx, handle)
 }
 
+/// Locate the OVMF CODE image. Ubuntu 22.04 ships
+/// `/usr/share/OVMF/OVMF_CODE.fd`; 24.04+ renamed it to
+/// `OVMF_CODE_4M.fd` (and sometimes `.ms.fd` for Secure Boot).
+/// Nix puts them under `$out/FV/`. Caller can override via `OVMF_DIR`.
+fn find_ovmf_code(ovmf_dir: &str) -> Option<String> {
+    for name in [
+        "OVMF_CODE.fd",
+        "OVMF_CODE_4M.fd",
+        "OVMF_CODE_4M.ms.fd",
+        "OVMF.fd",
+    ] {
+        let p = format!("{ovmf_dir}/{name}");
+        if std::path::Path::new(&p).is_file() {
+            return Some(p);
+        }
+    }
+    None
+}
+
+/// Find the OVMF VARS template and return a path to a fresh WRITABLE
+/// copy under `/tmp`. Distro packages keep the canonical VARS file
+/// read-only so QEMU's pflash writes fail; we always work on a copy.
+fn writable_ovmf_vars(ovmf_dir: &str) -> Option<String> {
+    let src = ["OVMF_VARS.fd", "OVMF_VARS_4M.fd", "OVMF_VARS_4M.ms.fd"]
+        .iter()
+        .map(|n| format!("{ovmf_dir}/{n}"))
+        .find(|p| std::path::Path::new(p).is_file())?;
+
+    let dst = format!("/tmp/zamak-test-ovmf-vars-{}.fd", std::process::id());
+    std::fs::copy(&src, &dst).ok()?;
+    // The destination inherits mode from the source on Linux; make
+    // sure owner has write permission regardless of how the distro
+    // packaged the template.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        if let Ok(meta) = std::fs::metadata(&dst) {
+            let mut perms = meta.permissions();
+            perms.set_mode(0o600);
+            let _ = std::fs::set_permissions(&dst, perms);
+        }
+    }
+    Some(dst)
+}
+
 fn build_qemu_command(test: &TestCase) -> Command {
     let mut cmd = Command::new("qemu-system-x86_64");
 
@@ -392,16 +437,20 @@ fn build_qemu_command(test: &TestCase) -> Command {
             cmd.args(["-drive", &format!("format=raw,file={}", test.image_path)]);
         }
         BootMode::Uefi => {
-            // Assumes OVMF is available at the standard path.
             let ovmf_dir = std::env::var("OVMF_DIR").unwrap_or_else(|_| "/usr/share/OVMF".into());
+            let code = find_ovmf_code(&ovmf_dir).unwrap_or_else(|| {
+                panic!("zamak-test: could not find OVMF_CODE.fd (or _4M variants) under {ovmf_dir}")
+            });
+            let vars = writable_ovmf_vars(&ovmf_dir).unwrap_or_else(|| {
+                panic!(
+                    "zamak-test: could not find/copy OVMF_VARS.fd (or _4M variants) from {ovmf_dir}"
+                )
+            });
             cmd.args([
                 "-drive",
-                &format!("if=pflash,format=raw,readonly=on,file={ovmf_dir}/OVMF_CODE.fd"),
+                &format!("if=pflash,format=raw,readonly=on,file={code}"),
             ]);
-            cmd.args([
-                "-drive",
-                &format!("if=pflash,format=raw,file={ovmf_dir}/OVMF_VARS.fd"),
-            ]);
+            cmd.args(["-drive", &format!("if=pflash,format=raw,file={vars}")]);
             cmd.args(["-drive", &format!("format=raw,file={}", test.image_path)]);
         }
     }
