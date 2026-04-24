@@ -7,6 +7,7 @@
 extern crate alloc;
 
 pub mod allocator;
+pub mod boot_bundle;
 pub mod entry;
 pub mod fat32;
 pub mod input;

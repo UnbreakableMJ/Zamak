@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Mohamed Hammad
 
+use crate::boot_bundle::VbeModeInfo;
 use crate::{call_bios_int, BiosRegs};
 use zamak_core::protocol::Framebuffer;
 
@@ -20,55 +21,9 @@ pub struct VbeInfoBlock {
     pub oem_data: [u8; 256],
 }
 
-#[repr(C, packed)]
-pub struct VbeModeInfo {
-    pub attributes: u16,
-    pub window_a: u8,
-    pub window_b: u8,
-    pub granularity: u16,
-    pub window_size: u16,
-    pub segment_a: u16,
-    pub segment_b: u16,
-    pub win_func_ptr: u32,
-    pub pitch: u16,
-    pub width: u16,
-    pub height: u16,
-    pub w_char: u8,
-    pub y_char: u8,
-    pub planes: u8,
-    pub bpp: u8,
-    pub banks: u8,
-    pub memory_model: u8,
-    pub bank_size: u8,
-    pub image_pages: u8,
-    pub reserved0: u8,
-    pub red_mask_size: u8,
-    pub red_field_position: u8,
-    pub green_mask_size: u8,
-    pub green_field_position: u8,
-    pub blue_mask_size: u8,
-    pub blue_field_position: u8,
-    pub rsvd_mask_size: u8,
-    pub rsvd_field_position: u8,
-    pub direct_color_mode_info: u8,
-    pub phys_base: u32,
-    pub reserved1: u32,
-    pub reserved2: u16,
-    // VBE 3.0+ fields
-    pub lin_bytes_per_scan_line: u16,
-    pub b_num_images: u8,
-    pub l_num_images: u8,
-    pub l_red_mask_size: u8,
-    pub l_red_field_position: u8,
-    pub l_green_mask_size: u8,
-    pub l_green_field_position: u8,
-    pub l_blue_mask_size: u8,
-    pub l_blue_field_position: u8,
-    pub l_rsvd_mask_size: u8,
-    pub l_rsvd_field_position: u8,
-    pub max_pixel_clock: u32,
-    pub reserved3: [u8; 189],
-}
+// VbeModeInfo moved to `boot_bundle::VbeModeInfo` so the Path B
+// real-mode orchestration can embed it in the BootDataBundle and
+// the legacy vbe.rs path can still consume the same bytes.
 
 pub fn find_and_set_vbe_mode(
     target_width: u16,
