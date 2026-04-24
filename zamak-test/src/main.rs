@@ -11,6 +11,8 @@
 //!   zamak-test --uefi <esp.img>     Run a single UEFI boot test
 //!   zamak-test --suite <name>       Run a named suite (see `SUITES`)
 //!
+//! Optional: `--timeout <seconds>` overrides the per-test budget.
+//!
 //! Suites are declared in `SUITES` below. Each entry maps a suite name to
 //! the list of test-case descriptors it expands to. The CI `qemu-smoke`
 //! and `asm-verification` jobs both invoke this binary via `--suite`.
@@ -18,11 +20,19 @@
 // Rust guideline compliant 2026-03-30
 
 use std::io::{BufRead, BufReader};
-use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::mpsc::{self, Sender};
+use std::thread::JoinHandle;
+use std::time::Duration;
 
-/// Default timeout for a single boot test.
-const BOOT_TIMEOUT: Duration = Duration::from_secs(30);
+/// Default per-test wall-clock budget when `--timeout` is not given.
+///
+/// A watchdog thread (see `run_test`) kills QEMU after this duration if
+/// the expected serial sentinels have not been observed. Without a
+/// watchdog, a silent QEMU (missing or malformed disk image) can hang
+/// `reader.lines()` indefinitely — that's the bug this constant used to
+/// be advisory-only for.
+const DEFAULT_BOOT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Exit code from QEMU ISA debug exit device (port 0x501).
 /// Test kernels write 0x31 (success) or 0x32 (failure) to this port.
@@ -92,32 +102,107 @@ fn env_path(var: &str, default: &str) -> String {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-
-    if args.len() < 2 {
-        print_usage();
-        std::process::exit(2);
-    }
-
-    match args[1].as_str() {
-        "--help" | "-h" => {
-            print_usage();
-            return;
-        }
-        "--bios" | "--uefi" => run_single(&args),
-        "--suite" => run_suite(&args),
-        other => {
-            eprintln!("zamak-test: unknown mode: {other}");
+    let parsed = match parse_args(&args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("zamak-test: {e}");
             print_usage();
             std::process::exit(2);
         }
+    };
+
+    match parsed.mode {
+        Mode::Help => print_usage(),
+        Mode::Single { boot, image } => run_single(boot, image, parsed.timeout),
+        Mode::Suite { name } => run_suite(&name, parsed.timeout),
     }
+}
+
+struct ParsedArgs {
+    mode: Mode,
+    timeout: Duration,
+}
+
+enum Mode {
+    Help,
+    Single { boot: BootMode, image: String },
+    Suite { name: String },
+}
+
+/// Hand-rolled parser. Accepts `--timeout <secs>` anywhere relative to
+/// the mode flag; rejects any other leading token.
+fn parse_args(argv: &[String]) -> Result<ParsedArgs, String> {
+    let mut timeout = DEFAULT_BOOT_TIMEOUT;
+    let mut mode: Option<Mode> = None;
+    let mut i = 1;
+
+    while i < argv.len() {
+        let arg = argv[i].as_str();
+        match arg {
+            "--help" | "-h" => {
+                return Ok(ParsedArgs {
+                    mode: Mode::Help,
+                    timeout,
+                });
+            }
+            "--timeout" => {
+                let val = argv
+                    .get(i + 1)
+                    .ok_or_else(|| "--timeout requires a seconds value".to_string())?;
+                let secs: u64 = val
+                    .parse()
+                    .map_err(|_| format!("--timeout: invalid seconds value '{val}'"))?;
+                if secs == 0 {
+                    return Err("--timeout: must be greater than 0".into());
+                }
+                timeout = Duration::from_secs(secs);
+                i += 2;
+            }
+            "--bios" | "--uefi" => {
+                let boot = if arg == "--bios" {
+                    BootMode::Bios
+                } else {
+                    BootMode::Uefi
+                };
+                let image = argv
+                    .get(i + 1)
+                    .ok_or_else(|| format!("{arg} requires an image path"))?
+                    .clone();
+                if mode.is_some() {
+                    return Err("only one mode flag allowed".into());
+                }
+                mode = Some(Mode::Single { boot, image });
+                i += 2;
+            }
+            "--suite" => {
+                let name = argv
+                    .get(i + 1)
+                    .ok_or_else(|| "--suite requires a suite name".to_string())?
+                    .clone();
+                if mode.is_some() {
+                    return Err("only one mode flag allowed".into());
+                }
+                mode = Some(Mode::Suite { name });
+                i += 2;
+            }
+            other => return Err(format!("unknown argument: {other}")),
+        }
+    }
+
+    let mode = mode.ok_or_else(|| "missing mode flag".to_string())?;
+    Ok(ParsedArgs { mode, timeout })
 }
 
 fn print_usage() {
     eprintln!("usage:");
-    eprintln!("  zamak-test --bios <image>");
-    eprintln!("  zamak-test --uefi <esp.img>");
-    eprintln!("  zamak-test --suite <name>");
+    eprintln!("  zamak-test [--timeout <seconds>] --bios <image>");
+    eprintln!("  zamak-test [--timeout <seconds>] --uefi <esp.img>");
+    eprintln!("  zamak-test [--timeout <seconds>] --suite <name>");
+    eprintln!();
+    eprintln!(
+        "  --timeout <seconds>   Per-test wall-clock budget (default: {}s).",
+        DEFAULT_BOOT_TIMEOUT.as_secs()
+    );
     eprintln!();
     eprintln!("suites:");
     for (name, cases) in suites() {
@@ -129,23 +214,14 @@ fn print_usage() {
     }
 }
 
-fn run_single(args: &[String]) {
-    if args.len() < 3 {
-        print_usage();
-        std::process::exit(2);
-    }
-    let mode = match args[1].as_str() {
-        "--bios" => BootMode::Bios,
-        "--uefi" => BootMode::Uefi,
-        _ => unreachable!(),
-    };
+fn run_single(boot: BootMode, image: String, timeout: Duration) {
     let test = TestCase {
         name: "boot-smoke",
-        mode,
-        image_path: args[2].clone(),
+        mode: boot,
+        image_path: image,
         expected_serial: vec!["ZAMAK"],
     };
-    match run_test(&test) {
+    match run_test(&test, timeout) {
         TestResult::Pass => println!("[PASS] {}", test.name),
         TestResult::Fail(r) => {
             println!("[FAIL] {} — {r}", test.name);
@@ -158,14 +234,9 @@ fn run_single(args: &[String]) {
     }
 }
 
-fn run_suite(args: &[String]) {
-    if args.len() < 3 {
-        eprintln!("zamak-test --suite: missing suite name");
-        std::process::exit(2);
-    }
-    let wanted = &args[2];
+fn run_suite(wanted: &str, timeout: Duration) {
     let all = suites();
-    let (_name, cases) = match all.iter().find(|(n, _)| *n == wanted.as_str()) {
+    let (_name, cases) = match all.iter().find(|(n, _)| *n == wanted) {
         Some(s) => s,
         None => {
             eprintln!("zamak-test: unknown suite '{wanted}'");
@@ -182,7 +253,7 @@ fn run_suite(args: &[String]) {
             println!("[SKIP] {} — image {} not found", test.name, test.image_path);
             continue;
         }
-        match run_test(test) {
+        match run_test(test, timeout) {
             TestResult::Pass => println!("[PASS] {}", test.name),
             TestResult::Fail(r) => {
                 println!("[FAIL] {} — {r}", test.name);
@@ -205,7 +276,7 @@ enum TestResult {
     Timeout,
 }
 
-fn run_test(test: &TestCase) -> TestResult {
+fn run_test(test: &TestCase, timeout: Duration) -> TestResult {
     let mut cmd = build_qemu_command(test);
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
@@ -216,16 +287,12 @@ fn run_test(test: &TestCase) -> TestResult {
     };
 
     let stdout = child.stdout.take().expect("stdout captured");
+    let (done_tx, watchdog) = start_watchdog(child, timeout);
+
     let reader = BufReader::new(stdout);
-    let start = Instant::now();
     let mut matched = vec![false; test.expected_serial.len()];
 
     for line in reader.lines() {
-        if start.elapsed() > BOOT_TIMEOUT {
-            let _ = child.kill();
-            return TestResult::Timeout;
-        }
-
         let line = match line {
             Ok(l) => l,
             Err(_) => break,
@@ -238,12 +305,21 @@ fn run_test(test: &TestCase) -> TestResult {
         }
 
         if matched.iter().all(|&m| m) {
-            let _ = child.kill();
-            return TestResult::Pass;
+            break;
         }
     }
 
-    let status = child.wait().ok();
+    // Signal the watchdog either that we're finished reading, or — if
+    // we broke out due to an IO error — that it should reap the child
+    // regardless. Dropping the sender works equally well (it lands as
+    // a Disconnected on the watchdog's side).
+    let _ = done_tx.send(());
+    let (timed_out, status) = watchdog.join().expect("watchdog join");
+
+    if timed_out {
+        return TestResult::Timeout;
+    }
+
     if let Some(status) = status {
         if let Some(code) = status.code() {
             if code == QEMU_EXIT_SUCCESS {
@@ -267,6 +343,32 @@ fn run_test(test: &TestCase) -> TestResult {
             .collect();
         TestResult::Fail(format!("missing serial output: {missing:?}"))
     }
+}
+
+/// Spawn a watchdog thread that owns `child`. The caller uses the
+/// returned `Sender<()>` to signal "done reading"; dropping it without
+/// sending works too. The thread's result is `(timed_out, status)`.
+///
+/// If the watchdog's `recv_timeout` fires before the caller signals,
+/// it kills `child` and reports `timed_out = true`. Either way it
+/// reaps the child before returning the exit status.
+fn start_watchdog(
+    mut child: Child,
+    timeout: Duration,
+) -> (Sender<()>, JoinHandle<(bool, Option<ExitStatus>)>) {
+    let (tx, rx) = mpsc::channel::<()>();
+    let handle = std::thread::spawn(move || {
+        let timed_out = matches!(
+            rx.recv_timeout(timeout),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        );
+        if timed_out {
+            let _ = child.kill();
+        }
+        let status = child.wait().ok();
+        (timed_out, status)
+    });
+    (tx, handle)
 }
 
 fn build_qemu_command(test: &TestCase) -> Command {
@@ -299,4 +401,115 @@ fn build_qemu_command(test: &TestCase) -> Command {
     }
 
     cmd
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Instant;
+
+    /// A silent, long-running child stands in for a hung QEMU: produces
+    /// no stdout, never exits on its own. The watchdog must kill it.
+    #[test]
+    fn watchdog_kills_silent_child_and_sets_flag() {
+        let child = Command::new("sleep")
+            .arg("60")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn sleep");
+
+        let start = Instant::now();
+        let (_tx, handle) = start_watchdog(child, Duration::from_secs(1));
+        let (timed_out, status) = handle.join().expect("watchdog join");
+        let elapsed = start.elapsed();
+
+        assert!(
+            elapsed < Duration::from_secs(3),
+            "watchdog should reap child within 3s, took {elapsed:?}"
+        );
+        assert!(timed_out, "timed_out must be true after watchdog fires");
+        assert!(
+            status.map(|s| !s.success()).unwrap_or(true),
+            "killed child must not report success"
+        );
+    }
+
+    /// When the caller signals "done" before the budget elapses the
+    /// watchdog must NOT flag a timeout.
+    #[test]
+    fn watchdog_does_not_flag_when_done_signalled() {
+        let child = Command::new("true")
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("spawn true");
+
+        let (tx, handle) = start_watchdog(child, Duration::from_secs(30));
+        // Give the child a moment to exit on its own, then signal.
+        std::thread::sleep(Duration::from_millis(100));
+        let _ = tx.send(());
+        let (timed_out, _status) = handle.join().expect("watchdog join");
+        assert!(!timed_out, "timed_out must be false when caller signals");
+    }
+
+    #[test]
+    fn parse_args_accepts_timeout_before_mode() {
+        let argv: Vec<String> = ["zamak-test", "--timeout", "5", "--suite", "boot-smoke"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let parsed = parse_args(&argv).expect("parse ok");
+        assert_eq!(parsed.timeout, Duration::from_secs(5));
+        match parsed.mode {
+            Mode::Suite { name } => assert_eq!(name, "boot-smoke"),
+            _ => panic!("expected Suite mode"),
+        }
+    }
+
+    #[test]
+    fn parse_args_accepts_timeout_after_mode() {
+        let argv: Vec<String> = ["zamak-test", "--suite", "boot-smoke", "--timeout", "7"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let parsed = parse_args(&argv).expect("parse ok");
+        assert_eq!(parsed.timeout, Duration::from_secs(7));
+    }
+
+    #[test]
+    fn parse_args_defaults_to_constant_when_missing() {
+        let argv: Vec<String> = ["zamak-test", "--suite", "boot-smoke"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let parsed = parse_args(&argv).expect("parse ok");
+        assert_eq!(parsed.timeout, DEFAULT_BOOT_TIMEOUT);
+    }
+
+    #[test]
+    fn parse_args_rejects_zero_timeout() {
+        let argv: Vec<String> = ["zamak-test", "--timeout", "0", "--suite", "boot-smoke"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        assert!(parse_args(&argv).is_err());
+    }
+
+    #[test]
+    fn parse_args_rejects_non_numeric_timeout() {
+        let argv: Vec<String> = ["zamak-test", "--timeout", "abc", "--suite", "boot-smoke"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        assert!(parse_args(&argv).is_err());
+    }
+
+    #[test]
+    fn parse_args_rejects_duplicate_mode() {
+        let argv: Vec<String> = ["zamak-test", "--suite", "boot-smoke", "--bios", "foo.img"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        assert!(parse_args(&argv).is_err());
+    }
 }
