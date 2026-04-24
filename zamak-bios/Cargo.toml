@@ -6,6 +6,12 @@ version = "0.7.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
 
+[features]
+# SMP AP bring-up. Off by default: the trampoline asm needs a
+# position-independent rewrite to link against the current `.trampoline`
+# section placement (see zamak-bios/src/main.rs module comment).
+smp = []
+
 [dependencies]
 zamak-core = { path = "../zamak-core", version = "0.7.0" }
 zamak-theme = { path = "../zamak-theme", version = "0.7.0" }

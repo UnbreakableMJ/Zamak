@@ -8,6 +8,7 @@
 
 // Rust guideline compliant 2026-03-30
 
+use crate::trampoline;
 use crate::utils;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
@@ -136,19 +137,20 @@ pub fn start_aps(lapic_addr: u32, cpus: &[Cpu], pml4: u64) -> Vec<protocol::SmpI
     //   Worst-case: reads wrong LAPIC ID if lapic_addr is invalid
     let bsp_lapic_id = unsafe { *((lapic_addr + 0x20) as *const u32) >> 24 } as u8;
 
-    // Copy trampoline to below 1 MiB and patch PML4 address.
-    let trampoline_bytes = include_bytes!("../../trampoline.bin");
+    // Copy trampoline to below 1 MiB and patch PML4 address. The
+    // trampoline lives in the `.trampoline` linker section (see
+    // `trampoline.rs` `global_asm!`); its start/end are linker symbols.
     // SAFETY:
-    //   Preconditions: 0x1000 is free memory below 1 MiB (conventional memory)
-    //   Postconditions: trampoline code is at 0x1000; PML4 patched at 0x1500
-    //   Clobbers: memory at 0x1000..0x1000+len and at 0x1500
-    //   Worst-case: overwrites data if 0x1000 region is in use
+    //   Preconditions: `trampoline_start`/`trampoline_end` are linker
+    //     symbols defined in the `.trampoline` global_asm! block;
+    //     0x1000 is free memory below 1 MiB (conventional memory).
+    //   Postconditions: trampoline code is at 0x1000; PML4 patched at 0x1500.
+    //   Clobbers: memory at 0x1000..0x1000+len and at 0x1500.
+    //   Worst-case: overwrites data if 0x1000 region is in use.
+    let tramp_ptr = unsafe { &trampoline::trampoline_start as *const u8 };
+    let tramp_len = trampoline::trampoline_size();
     unsafe {
-        utils::memcpy(
-            0x1000 as *mut u8,
-            trampoline_bytes.as_ptr(),
-            trampoline_bytes.len(),
-        );
+        utils::memcpy(0x1000 as *mut u8, tramp_ptr, tramp_len);
         *((0x1000 + 0x500) as *mut u32) = pml4 as u32;
     }
 

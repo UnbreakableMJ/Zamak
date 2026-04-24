@@ -145,7 +145,12 @@ global_asm!(
     "    .quad 0x00af92000000ffff", // Data 64
     "trampoline_gdt_ptr_long:",
     "    .word . - trampoline_gdt_long - 1",
-    "    .quad trampoline_gdt_long",
+    // lgdt in long mode reads a 10-byte GDTR (u16 limit + u64 base).
+    // We assemble in 32-bit mode so `.quad sym` is an unsupported
+    // relocation — emit the base as two .long fields instead; the
+    // trampoline always loads below 4 GiB so the upper half is zero.
+    "    .long trampoline_gdt_long",
+    "    .long 0",
     // =========================================================================
     // Patchable fields (written by BSP before sending SIPI)
     // =========================================================================

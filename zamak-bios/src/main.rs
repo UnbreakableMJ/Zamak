@@ -14,7 +14,16 @@ pub mod input;
 pub mod mbr;
 pub mod mmap;
 pub mod paging;
+// SMP bring-up and its AP trampoline are temporarily disabled in the
+// BIOS boot path. The trampoline's real-mode asm references in-section
+// labels via 16-bit absolute relocations, which rust-lld cannot resolve
+// once the `.trampoline` section lands beyond 64 KiB in the final ELF.
+// Fixing this needs a position-independent rewrite (or a linker-script
+// VMA override) and is out of M1-16 scope. The boot-smoke test kernel
+// does not consume a Limine SMP response.
+#[cfg(feature = "smp")]
 pub mod smp;
+#[cfg(feature = "smp")]
 pub mod trampoline;
 pub mod utils;
 pub mod vbe;
@@ -388,41 +397,17 @@ pub extern "C" fn kmain(drive_id: u8) -> ! {
     // Prepare ACPI/RSDP
     let rsdp = find_rsdp();
 
-    // SMP Discovery and Startup
-    let mut smp_response = None;
-    if let Some(rsdp_addr) = rsdp {
-        let (lapic_addr, cpus) = smp::parse_madt(rsdp_addr);
-        let pml4 = paging::setup_paging(
-            info.segments[0].paddr,
-            kernel_vaddr_start,
-            kernel_size,
-            &mmap_entries,
-        );
-        let smp_list = smp::start_aps(lapic_addr, &cpus, pml4.as_u64());
-
-        let mut smp_info_ptrs = Vec::new();
-        for info in smp_list {
-            smp_info_ptrs.push(Box::leak(Box::new(info)) as *const protocol::SmpInfo);
-        }
-        let smp_ptr = Box::leak(smp_info_ptrs.into_boxed_slice());
-
-        smp_response = Some(protocol::SmpResponse {
-            revision: 0,
-            flags: 0,
-            // SAFETY: lapic_addr is the LAPIC MMIO base from MADT; ID register at +0x20.
-            // LAPIC ID reg is a well-known MMIO offset; we use checked_add
-            // to make the overflow impossibility explicit (RG-3).
-            bsp_lapic_id: unsafe {
-                let id_reg = lapic_addr
-                    .checked_add(0x20)
-                    .expect("LAPIC base + 0x20 overflowed u64")
-                    as *const u32;
-                *id_reg >> 24
-            } as u32,
-            cpu_count: smp_ptr.len() as u64,
-            cpus: smp_ptr.as_ptr() as u64,
-        });
-    }
+    // SMP Discovery and Startup — see module-level comment on the
+    // `smp`/`trampoline` mod declarations: trampoline asm needs a
+    // position-independent rewrite (tracked separately). The Limine
+    // Protocol treats the SMP response as optional, so leaving it
+    // `None` is a conforming bootloader behavior.
+    #[cfg(feature = "smp")]
+    let smp_response = smp_bringup(rsdp, &info, kernel_vaddr_start, kernel_size, &mmap_entries);
+    #[cfg(not(feature = "smp"))]
+    let _ = rsdp;
+    #[cfg(not(feature = "smp"))]
+    let smp_response: Option<protocol::SmpResponse> = None;
 
     // Prepare Kernel File
     let kf_data = Box::leak(kernel_buf.into_boxed_slice());
