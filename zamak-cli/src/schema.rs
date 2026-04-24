@@ -126,7 +126,7 @@ pub fn find(name: &str) -> Option<&'static CommandSpec> {
 
 /// Builds the complete JSON Schema document for the whole tool.
 pub fn full_schema() -> Value {
-    let cmds: Vec<Value> = COMMANDS.iter().map(|c| command_schema(c)).collect();
+    let cmds: Vec<Value> = COMMANDS.iter().map(command_schema).collect();
     obj([
         ("$schema", Value::str(SCHEMA_URL)),
         ("title", Value::str("zamak")),

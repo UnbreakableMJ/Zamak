@@ -68,8 +68,9 @@ impl Format {
 }
 
 /// How color policy was resolved. Follows SFRS §4.4 precedence.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ColorMode {
+    #[default]
     Auto,
     Always,
     Never,
@@ -104,6 +105,7 @@ impl OutputPolicy {
     /// Resolves `--format`, `--json`, `--color`, `NO_COLOR`,
     /// `FORCE_COLOR`, `CLICOLOR`, `AI_AGENT`, `CI`, `TERM=dumb`, and
     /// TTY state into a single policy.
+    #[allow(clippy::too_many_arguments)]
     pub fn resolve(
         explicit_format: Option<Format>,
         explicit_json: bool,
@@ -197,12 +199,10 @@ impl OutputPolicy {
             Format::Human => {
                 // Human mode: the command is responsible for its own
                 // rendering. This path is a safety fallback —
-                // dump the envelope as pretty JSON.
-                if self.color {
-                    writeln!(out, "{}", envelope.to_pretty())
-                } else {
-                    writeln!(out, "{}", envelope.to_pretty())
-                }
+                // dump the envelope as pretty JSON. Color has no
+                // effect on the pretty JSON path today; kept as a
+                // single branch until per-theme coloring lands.
+                writeln!(out, "{}", envelope.to_pretty())
             }
             Format::Explore => {
                 // Explore is handled by the TUI module before reaching

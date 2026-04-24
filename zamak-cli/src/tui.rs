@@ -36,7 +36,7 @@ pub fn should_fall_back(env: &EnvSnapshot, policy: &OutputPolicy) -> Option<&'st
     #[cfg(not(feature = "tui"))]
     {
         let _ = policy;
-        return Some("TUI feature not compiled in; emitting JSON");
+        Some("TUI feature not compiled in; emitting JSON")
     }
     #[cfg(feature = "tui")]
     {

@@ -4,13 +4,14 @@
 name = "zamak-uefi"
 version = "0.7.0"
 edition = "2021"
+license = "GPL-3.0-or-later"
 
 [dependencies]
 uefi = "0.24"
 uefi-services = "0.21"
 limine-protocol = "0.5"
-zamak-core = { path = "../zamak-core" }
-zamak-theme = { path = "../zamak-theme" }
+zamak-core = { path = "../zamak-core", version = "0.7.0" }
+zamak-theme = { path = "../zamak-theme", version = "0.7.0" }
 log = "0.4"
 
 # x86-specific crate — only depend on it when we actually target x86-64 so

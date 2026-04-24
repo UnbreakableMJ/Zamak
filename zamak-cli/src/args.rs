@@ -35,12 +35,6 @@ pub struct GlobalFlags {
     pub version: bool,
 }
 
-impl Default for ColorMode {
-    fn default() -> Self {
-        ColorMode::Auto
-    }
-}
-
 /// Result of `parse_globals`: the populated `GlobalFlags` plus the
 /// leftover args (sub-command name + its own args).
 #[derive(Debug)]

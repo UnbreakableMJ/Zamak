@@ -63,6 +63,7 @@ fn main() {
 
 type Outcome = Result<i32, (CliError, OutputPolicy, String)>;
 
+#[allow(clippy::result_large_err)]
 fn run(argv: &[String]) -> Outcome {
     // Split: argv[0] is the binary path; skip it for global parsing.
     let raw = &argv[1..];
@@ -139,6 +140,7 @@ fn run(argv: &[String]) -> Outcome {
 /// - JSON envelope construction
 /// - Field projection and jsonl/yaml/csv formatting
 /// - Error-to-envelope translation on stderr
+#[allow(clippy::result_large_err)]
 fn run_data_cmd(
     subcommand: &str,
     policy: &OutputPolicy,

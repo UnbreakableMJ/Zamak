@@ -107,7 +107,12 @@ impl<'a> Canvas<'a> {
             val |= (color.g as u32) << self.fb.green_mask_shift;
             val |= (color.b as u32) << self.fb.blue_mask_shift;
 
-            *(ptr as *mut u32) = val;
+            // write_unaligned: in real hardware the framebuffer base is
+            // page-aligned and pitch typically width*4, so writes are
+            // 4-byte aligned in practice. Under the `Vec<u8>`-backed
+            // test harness, alignment isn't guaranteed — Miri's
+            // symbolic-alignment check correctly flags a plain write.
+            (ptr as *mut u32).write_unaligned(val);
         }
     }
 }

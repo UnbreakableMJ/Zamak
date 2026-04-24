@@ -4,10 +4,11 @@
 name = "zamak-bios"
 version = "0.7.0"
 edition = "2021"
+license = "GPL-3.0-or-later"
 
 [dependencies]
-zamak-core = { path = "../zamak-core" }
-zamak-theme = { path = "../zamak-theme" }
+zamak-core = { path = "../zamak-core", version = "0.7.0" }
+zamak-theme = { path = "../zamak-theme", version = "0.7.0" }
 log = "0.4"
 x86_64 = { version = "0.15", default-features = false, features = ["instructions"] }
 limine-protocol = "0.5"

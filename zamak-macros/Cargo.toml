@@ -5,6 +5,7 @@ name = "zamak-macros"
 version = "0.7.0"
 edition = "2021"
 description = "Procedural macros for ZAMAK bootloader safety annotations"
+license = "GPL-3.0-or-later"
 
 [lib]
 proc-macro = true

@@ -7,7 +7,7 @@ use crate::error::CliError;
 use crate::json::{obj, Value};
 
 pub fn run(args: &[String]) -> Result<Value, CliError> {
-    for a in args {
+    if let Some(a) = args.first() {
         return Err(CliError::usage(format!("describe: unknown argument '{a}'")));
     }
 

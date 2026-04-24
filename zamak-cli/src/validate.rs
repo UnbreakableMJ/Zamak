@@ -103,7 +103,7 @@ pub fn confirm_destructive(
         return Err(CliError::usage(format!(
             "{label}: destructive operation requires --yes or --force when stdin is not a TTY"
         ))
-        .with_hint(&format!(
+        .with_hint(format!(
             "Re-run with '--yes' after verifying the target: zamak {label} --yes"
         )));
     }
