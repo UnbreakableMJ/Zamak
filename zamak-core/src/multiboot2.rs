@@ -232,19 +232,15 @@ pub fn parse_header(kernel: &[u8], offset: usize) -> Option<ParsedHeader> {
             MULTIBOOT2_HEADER_TAG_EFI_BS => {
                 parsed.efi_bs = true;
             }
-            MULTIBOOT2_HEADER_TAG_ENTRY_ADDRESS => {
-                if pos + 12 <= kernel.len() {
-                    parsed.entry_address = Some(u32::from_le_bytes(
-                        kernel[pos + 8..pos + 12].try_into().ok()?,
-                    ));
-                }
+            MULTIBOOT2_HEADER_TAG_ENTRY_ADDRESS if pos + 12 <= kernel.len() => {
+                parsed.entry_address = Some(u32::from_le_bytes(
+                    kernel[pos + 8..pos + 12].try_into().ok()?,
+                ));
             }
-            MULTIBOOT2_HEADER_TAG_ENTRY_ADDRESS_EFI64 => {
-                if pos + 12 <= kernel.len() {
-                    parsed.entry_address_efi64 = Some(u32::from_le_bytes(
-                        kernel[pos + 8..pos + 12].try_into().ok()?,
-                    ));
-                }
+            MULTIBOOT2_HEADER_TAG_ENTRY_ADDRESS_EFI64 if pos + 12 <= kernel.len() => {
+                parsed.entry_address_efi64 = Some(u32::from_le_bytes(
+                    kernel[pos + 8..pos + 12].try_into().ok()?,
+                ));
             }
             _ => {}
         }
@@ -285,7 +281,7 @@ impl BootInfoBuilder {
 
     /// Aligns the buffer to 8 bytes.
     fn align8(&mut self) {
-        while self.buf.len() % 8 != 0 {
+        while !self.buf.len().is_multiple_of(8) {
             self.buf.push(0);
         }
     }

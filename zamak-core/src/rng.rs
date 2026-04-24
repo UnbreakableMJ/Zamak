@@ -450,6 +450,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_arch = "x86_64")]
     fn x86_kaslr_rng_new_does_not_panic() {
         // Just exercises the X86KaslrRng::new() detection path — the
         // result (which flags are set) depends on host CPU but the
@@ -458,6 +459,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_arch = "x86_64")]
     fn x86_kaslr_rng_get_u64_returns_nonzero_sometimes() {
         // With fallback to rdtsc + mixing, we should see variety
         // across 100 calls. At minimum not all zero (which would

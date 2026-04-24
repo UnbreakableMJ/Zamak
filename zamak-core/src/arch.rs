@@ -16,6 +16,7 @@
 /// x86/x86-64 specific hardware operations.
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub mod x86 {
+    #[cfg(not(miri))]
     use crate::zamak_unsafe;
 
     // =========================================================================
@@ -1041,7 +1042,7 @@ pub mod riscv64 {
     /// - bit 7 (D)  — Dirty
     /// - bits 53:10 — Physical Page Number
     /// - bits 62:61 — PBMT (page-based memory type, Svpbmt): 0 = PMA default,
-    ///                1 = NC (Non-Cacheable), 2 = IO (Strong-order device)
+    ///   1 = NC (Non-Cacheable), 2 = IO (Strong-order device)
     pub mod paging {
         use crate::vmm::{CachePolicy, Mapping, Permissions, VmmPlan};
 

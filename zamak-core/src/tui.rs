@@ -122,7 +122,7 @@ impl MenuState {
                 let allow = self
                     .last_diagnostic
                     .as_ref()
-                    .map_or(true, |d| d.level != EditorDiagnosticLevel::Error);
+                    .is_none_or(|d| d.level != EditorDiagnosticLevel::Error);
                 if allow {
                     self.boot_requested = true;
                     self.editing = false;
