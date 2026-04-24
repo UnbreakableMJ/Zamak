@@ -2,7 +2,7 @@
 
 [package]
 name = "zamak-proto"
-version = "0.8.0"
+version = "0.8.1"
 edition = "2021"
 description = "Limine Protocol types and request/response structures for ZAMAK"
 license = "GPL-3.0-or-later"

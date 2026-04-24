@@ -21,14 +21,17 @@ jobs:
         include:
           - target: x86_64-unknown-uefi
             artifact: BOOTX64.EFI
-          - target: i686-unknown-uefi
-            artifact: BOOTIA32.EFI
           - target: aarch64-unknown-uefi
             artifact: BOOTAA64.EFI
           - target: riscv64gc-unknown-none-elf
             artifact: BOOTRISCV64.EFI
           - target: loongarch64-unknown-none
             artifact: BOOTLOONGARCH64.EFI
+    # BOOTIA32.EFI (i686-unknown-uefi) is intentionally omitted:
+    # zamak-uefi/src/paging.rs `compile_error!`s for
+    # `target_arch = "x86"` because the IA-32 paging path was
+    # never implemented. Add back when 32-bit x86 UEFI is
+    # supported in the loader.
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
@@ -38,25 +41,20 @@ jobs:
       - name: cargo build --release
         run: |
           cargo build -p zamak-uefi --release --target ${{ matrix.target }} \
-            -Z build-std=core,alloc,compiler_builtins
+            -Z build-std=core,alloc,compiler_builtins \
+            -Z build-std-features=compiler-builtins-mem
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: target/${{ matrix.target }}/release/*.efi
 
-  bios-stage3:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: rust-src
-      - name: build zamak-bios.sys
-        run: cargo build -p zamak-bios --release
-      - uses: actions/upload-artifact@v4
-        with:
-          name: zamak-bios.sys
-          path: target/release/zamak-bios
+  # `bios-stage3` (zamak-bios.sys BIOS stage-3 binary) is intentionally
+  # not built here. `cargo build -p zamak-bios --release` for the host
+  # target fails with a duplicate `_start` symbol (zamak-bios has its
+  # own freestanding entry). It needs the `i686-zamak.json` custom
+  # target + `-Z build-std` — gated behind M1-16 completion because
+  # the BIOS boot chain isn't yet green end-to-end (`call_bios_int`
+  # trampoline hang). Re-add once M1-16 is `[✓]`.
 
   cli-binaries:
     strategy:
@@ -105,23 +103,45 @@ jobs:
 
   publish:
     runs-on: ubuntu-latest
-    needs: [build-artifacts, bios-stage3, cli-binaries, cli-freebsd]
+    needs: [build-artifacts, cli-binaries, cli-freebsd]
+    # `gh release create` needs write access to the repo's contents.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: dist
       - uses: dtolnay/rust-toolchain@stable
+      - name: flatten artifact directories
+        # Each artifact was uploaded under its own subdir
+        # (dist/<name>/<file>). Flatten to dist/<file> so release
+        # assets have the expected short names.
+        run: |
+          set -euo pipefail
+          mkdir -p flat
+          find dist -type f -exec mv {} flat/ \;
+          rm -rf dist
+          mv flat dist
+          ls -la dist
       - name: compute SHA256SUMS
         run: |
           cd dist
-          find . -type f -print0 | xargs -0 sha256sum > ../SHA256SUMS
+          find . -maxdepth 1 -type f -print0 | xargs -0 sha256sum > ../SHA256SUMS
       - name: generate SPDX SBOM
         run: |
           cargo run -p zamak-cli -- sbom \
             --release-version "${GITHUB_REF_NAME#v}" \
-            --output "zamak-${GITHUB_REF_NAME#v}.spdx.json" \
-            dist/**/*
-      - name: create release
+            --output "zamak-${GITHUB_REF_NAME#v}.spdx.json"
+      - name: create GitHub release + upload assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "TODO: upload dist/, SHA256SUMS, and zamak-*.spdx.json via release API"
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          # `--generate-notes` uses GH's auto-extracted commit notes;
+          # CHANGELOG.md carries the curated breakdown.
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "Release ${GITHUB_REF_NAME}" \
+            --generate-notes \
+            dist/* SHA256SUMS "zamak-${VERSION}.spdx.json"

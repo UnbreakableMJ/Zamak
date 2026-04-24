@@ -12,6 +12,54 @@ All dates use ISO 8601 format (YYYY-MM-DD).
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-04-24
+
+Release-workflow patch release. No code changes; fixes
+`.github/workflows/release.yml` so the tag actually publishes a
+GitHub Release with assets. v0.8.0's tag was created but its
+publish job was a `echo TODO:` placeholder, and two matrix jobs
+(`bios-stage3`, `build-artifacts i686-unknown-uefi`) failed
+because neither the BIOS binary nor 32-bit x86 UEFI compiles
+from the default config — they had been listed in the release
+matrix since v0.6.x despite never producing a usable artifact.
+
+### Fixed
+
+- **`release.yml` `publish` job** — replaced the stub
+  `echo "TODO: upload …"` with a real `gh release create
+  --generate-notes dist/* SHA256SUMS …spdx.json`. Added
+  `permissions: contents: write` so the default `GITHUB_TOKEN`
+  can create the release. Artifacts are now flattened out of
+  `actions/download-artifact@v4`'s per-name subdirectories
+  before upload, so asset filenames on the release page are
+  `BOOTX64.EFI` / `zamak-linux-x86_64` / etc. rather than
+  nested paths.
+- **`release.yml` `build-artifacts` matrix** — dropped the
+  `i686-unknown-uefi` → `BOOTIA32.EFI` entry.
+  `zamak-uefi/src/paging.rs` `compile_error!`s for
+  `target_arch = "x86"`; 32-bit UEFI paging was never
+  implemented. Comment in the workflow points at M6 milestones
+  for the add-back.
+- **`release.yml` `bios-stage3` job** — removed entirely.
+  `cargo build -p zamak-bios --release` against the host target
+  produces a duplicate `_start` link error because zamak-bios
+  is a freestanding binary with its own entry. The job needs
+  the custom i686 target + `-Z build-std` (as
+  `zamak-test/build-images.sh` already does), and can't produce
+  a working binary until M1-16's `call_bios_int` trampoline is
+  fixed. Comment in the workflow points at the re-add criteria.
+- **`build-artifacts` build flags** — added
+  `-Z build-std-features=compiler-builtins-mem` to match what
+  `zamak-test/build-images.sh` passes; without it the memset /
+  memcpy intrinsics aren't compiled into the freestanding
+  builds (not an observed failure here, but consistency fix).
+
+### Note on v0.8.0
+
+The `v0.8.0` git tag remains in the repo but has no associated
+GitHub Release page (publish was skipped). Use `v0.8.1` as the
+effective "0.8" release point.
+
 ## [0.8.0] - 2026-04-24
 
 CI-infrastructure consolidation release. Since v0.7.0, the CI

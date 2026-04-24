@@ -2,7 +2,7 @@
 
 [package]
 name = "zamak-test"
-version = "0.8.0"
+version = "0.8.1"
 edition = "2021"
 description = "QEMU integration test harness for the ZAMAK bootloader"
 license = "GPL-3.0-or-later"
