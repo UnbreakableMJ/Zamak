@@ -43,8 +43,18 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - name: cargo clippy -- -D warnings
-        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: cargo clippy -- -D warnings (host-runnable crates)
+        # Freestanding crates (zamak-uefi, zamak-bios, zamak-decompressor,
+        # zamak-stage1) pull in `uefi-services` which defines its own
+        # `#[panic_handler]`; linking against Linux std produces E0152
+        # duplicate lang item errors. Those crates are covered by the
+        # `cross` job under their real targets. Lint only crates whose
+        # target is the host.
+        run: >-
+          cargo clippy
+          -p zamak-core -p zamak-proto -p zamak-theme -p zamak-cli
+          -p zamak-macros -p zamak-test
+          --all-targets -- -D warnings
 
   # POSIX-2: verify the host CLI builds and passes tests on Linux,
   # macOS AArch64, and FreeBSD. The `freebsd` job below covers the

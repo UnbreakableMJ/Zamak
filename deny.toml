@@ -1,15 +1,17 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Zamak cargo-deny configuration
 # See https://embarkstudios.github.io/cargo-deny/
+#
+# Schema updated for cargo-deny >= 0.15 (EmbarkStudios/cargo-deny#611):
+# the old per-severity keys (vulnerability/yanked/notice/unlicensed/
+# copyleft) were removed. Advisories are now "deny by default"; use
+# `[advisories.ignore]` for specific RUSTSEC-IDs. License policy is
+# expressed solely through the `allow` list.
 
 [advisories]
-vulnerability = "deny"
 unmaintained = "workspace"
-yanked = "warn"
-notice = "warn"
 
 [licenses]
-unlicensed = "deny"
 allow = [
     "GPL-3.0",
     "Apache-2.0",
@@ -22,7 +24,6 @@ allow = [
     "MPL-2.0",
     "Zlib",
 ]
-copyleft = "allow"
 
 [bans]
 multiple-versions = "warn"

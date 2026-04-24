@@ -93,7 +93,11 @@ pub unsafe fn apply_relocations(phys_base: *mut u8, virt_base: u64, relocations:
         // For R_X86_64_RELATIVE, the value should be Base + Addend.
         let value = virt_base.wrapping_add(reloc.addend as u64);
 
-        *target_ptr = value;
+        // Use unaligned write: the function's contract (phys_base: *mut u8)
+        // does not require 8-byte alignment, and Rust `*ptr = value` on
+        // *mut u64 is UB when the address isn't 8-aligned even though
+        // x86-64/aarch64 tolerate it in hardware.
+        target_ptr.write_unaligned(value);
     }
 }
 
