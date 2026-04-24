@@ -185,6 +185,14 @@ pub struct BootDataBundle {
     /// FAT32 regardless.
     pub partition_type: u8,
     pub _pad1: [u8; 3],
+    /// Physical address of a pre-loaded copy of the boot partition's
+    /// leading bytes. Real-mode orchestration bulk-reads the
+    /// partition through `rm_load_chunk` into this buffer; kmain
+    /// then parses FAT32 against it in protected mode without
+    /// needing another BIOS call.
+    pub partition_image_phys: u64,
+    /// Length in bytes of the pre-loaded partition image.
+    pub partition_image_len: u64,
     pub vbe_info: VbeModeInfo,
     /// Length of the config bytes in `config`. `0` means "no config
     /// file found" — kmain panics in that case.

@@ -13,6 +13,7 @@ pub mod fat32;
 pub mod input;
 pub mod mbr;
 pub mod paging;
+pub mod ram_disk;
 pub mod rm_io;
 // The trampoline-dependent BIOS-interrupt callers are only present
 // when the `legacy_trampoline` feature is enabled. M1-16 Path B moves

@@ -273,4 +273,59 @@ global_asm!(
                                    // 64-KiB limit cache (via real-mode seg load)
     "    sti",
     "    .byte 0xC3",
+    // =======================================================================
+    // rm_load_chunk
+    //
+    // Load up to 16 contiguous sectors starting at LBA `EBX` into a
+    // 32-bit destination `EDI` via the bounce buffer at phys 0x5000.
+    //
+    // The outer loop (sector-by-sector advancement, count tracking,
+    // error propagation) lives in the `_start` orchestration — this
+    // routine handles one chunk and leaves register state unchanged
+    // for registers the caller needs to track across iterations
+    // (EBX/ECX/EDI are consumed as inputs, not preserved here; the
+    // caller recomputes them between chunks).
+    //
+    // In:
+    //   DL  = BIOS drive number
+    //   EBX = LBA (low 32 bits; the DAP's high-32 is zeroed)
+    //   AX  = sector count (1..=16)
+    //   EDI = destination linear address
+    // Out:
+    //   AL  = 0x00 on success, BIOS AH code on failure.
+    // Clobbers: AX, CX, DX, ESI, flags, DF, ES (restored).
+    // =======================================================================
+    ".global rm_load_chunk",
+    "rm_load_chunk:",
+    "    push bp",
+    "    mov bp, sp",
+    // Stash inputs at DAP / near-scratch so the BIOS call clobbering
+    // general registers doesn't lose them.
+    "    mov word ptr [0x0700], 0x0010",       // DAP size + reserved
+    "    mov word ptr [0x0702], ax",           // count
+    "    mov word ptr [0x0704], 0x5000",       // buffer offset (bounce)
+    "    mov word ptr [0x0706], 0x0000",       // buffer segment
+    "    mov dword ptr [0x0708], ebx",         // LBA low32
+    "    mov dword ptr [0x070C], 0",           // LBA high32
+    // Save the chunk byte count (AX × 512) in the scratch dword at
+    // 0x0710 so we can recover it after the BIOS call blows away AX.
+    "    movzx ecx, ax",
+    "    shl ecx, 9",
+    "    mov dword ptr [0x0710], ecx",
+    // Issue the disk read. SI = DAP offset, DL still holds the drive.
+    "    mov si, 0x0700",
+    "    call rm_disk_read_ext",
+    "    test al, al",
+    "    jnz .Lrlc_err",
+    // Success: memcpy bounce → high dest.
+    "    mov ecx, [0x0710]",
+    "    mov esi, 0x5000",
+    "    call rm_memcpy_to_high",
+    "    xor al, al",
+    "    pop bp",
+    "    .byte 0xC3",
+    ".Lrlc_err:",
+    // rm_disk_read_ext already set AL to the BIOS error code.
+    "    pop bp",
+    "    .byte 0xC3",
 );
