@@ -187,13 +187,69 @@ fn fulfill_requests(
 use zamak_core::arch::x86 as arch;
 use zamak_core::rng::{KaslrRng, X86KaslrRng};
 
+/// Writes a single ASCII byte to COM1 (0x3F8). Used as a boot-progress
+/// checkpoint marker — the test harness doesn't consume these, they're
+/// for humans reading QEMU serial logs during M1-16 bring-up.
+#[inline(always)]
+fn mark(b: u8) {
+    // SAFETY:
+    //   Preconditions: COM1 (0x3F8) exists in every QEMU PC machine.
+    //   Postconditions: byte appears on -serial stdio output.
+    //   Clobbers: DX, AL (temps).
+    //   Worst-case: spurious byte appears on serial.
+    unsafe {
+        core::arch::asm!(
+            "mov dx, 0x3F8",
+            "out dx, al",
+            in("al") b,
+            out("dx") _,
+            options(nostack, nomem, preserves_flags),
+        );
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn kmain(drive_id: u8) -> ! {
+    mark(b'M'); // kmain entry
+
     // 2. Initialize Disk
     let mut disk = Disk::new(drive_id);
     let mut disk_ext2 = disk.clone();
+    mark(b'D'); // Disk::new returned
 
-    // 3. Mount Filesystem
+    // 3. Read the MBR partition table to find a FAT32 / EXT2 partition.
+    //    An unpartitioned disk would have the filesystem at LBA 0, but
+    //    `zamak-test/build-images.sh` stamps a proper MBR partition
+    //    table via `sfdisk`, so we follow that pointer.
+    use zamak_core::fs::BlockDevice;
+    let mut mbr_buf = [0u8; 512];
+    BlockDevice::read_sectors(&disk, 0, 1, &mut mbr_buf).expect("Failed to read MBR sector");
+    mark(b'm'); // MBR read
+    let mut part_lba: u64 = 0;
+    for i in 0..4 {
+        let base = 446 + i * 16;
+        let type_byte = mbr_buf[base + 4];
+        // 0x01=FAT12, 0x04=FAT16<32MB, 0x06=FAT16, 0x0B=FAT32/CHS,
+        // 0x0C=FAT32/LBA, 0x83=Linux (EXT*).
+        if matches!(type_byte, 0x01 | 0x04 | 0x06 | 0x0B | 0x0C | 0x83) {
+            let lba = u32::from_le_bytes([
+                mbr_buf[base + 8],
+                mbr_buf[base + 9],
+                mbr_buf[base + 10],
+                mbr_buf[base + 11],
+            ]);
+            if lba != 0 {
+                part_lba = lba as u64;
+                break;
+            }
+        }
+    }
+    if part_lba == 0 {
+        panic!("No FAT32/EXT2 partition entry in MBR");
+    }
+    mark(b'P'); // Partition LBA resolved
+
+    // 4. Mount Filesystem
     // We try FAT32 first, then EXT2
     use crate::fat32::Fat32;
     use zamak_core::ext2::Ext2;
@@ -202,16 +258,18 @@ pub extern "C" fn kmain(drive_id: u8) -> ! {
     let mut fs_fat: Option<Fat32> = None;
     let mut fs_ext2: Option<Ext2> = None;
 
-    // Probe FAT32
-    if let Ok(f) = Fat32::parse(&mut disk, 0) {
+    mark(b'F'); // About to probe filesystems
+                // Probe FAT32
+    if let Ok(f) = Fat32::parse(&mut disk, part_lba) {
         fs_fat = Some(f);
     }
     // If not FAT32, probe EXT2
-    else if let Ok(f) = Ext2::mount(&mut disk_ext2, 0) {
+    else if let Ok(f) = Ext2::mount(&mut disk_ext2, part_lba) {
         fs_ext2 = Some(f);
     } else {
         panic!("No supported filesystem found on boot partition");
     }
+    mark(b'f'); // Filesystem mounted
 
     let fs: &dyn FileSystem = if let Some(ref f) = fs_fat {
         f
@@ -229,6 +287,7 @@ pub extern "C" fn kmain(drive_id: u8) -> ! {
     // Simple parser
     let config_str = core::str::from_utf8(&config_file_buf[..config_size]).unwrap_or("");
     let config = zamak_core::config::parse(config_str);
+    mark(b'C'); // Config parsed
 
     // 4. Initialize Graphics (VBE) for TUI
     let mut fb_opt = vbe::find_and_set_vbe_mode(1024, 768, 32);

@@ -93,6 +93,10 @@ impl Disk {
         regs.edx = self.drive_id as u32;
         regs.esi = DAP_ADDR; // DS:SI -> DAP.
 
+        // Serial breadcrumbs: '[' before the 32→real→32 mode round-trip,
+        // ']' after. If we see '[' but not ']' during M1-16 bring-up the
+        // `call_bios_int` trampoline is the culprit.
+        crate::mark(b'[');
         // SAFETY:
         //   Preconditions: DAP at 0x6000 is valid; drive_id is the BIOS boot drive
         //   Postconditions: sectors read to buffer_addr; regs updated with status
@@ -101,11 +105,19 @@ impl Disk {
         unsafe {
             call_bios_int(0x13, &mut regs);
         }
-
-        if (regs.eax >> 8) & 0xFF != 0 {
-            return Err((regs.eax >> 8) as u8);
+        crate::mark(b']');
+        let ah = ((regs.eax >> 8) & 0xFF) as u8;
+        if ah != 0 {
+            // Emit two hex digits of AH to serial so the bring-up log
+            // shows which BIOS error fired instead of a silent panic.
+            let hi = ah >> 4;
+            let lo = ah & 0x0F;
+            crate::mark(b'!');
+            crate::mark(if hi < 10 { b'0' + hi } else { b'A' + (hi - 10) });
+            crate::mark(if lo < 10 { b'0' + lo } else { b'A' + (lo - 10) });
+            return Err(ah);
         }
-
+        crate::mark(b'.'); // successful read
         Ok(())
     }
 }
