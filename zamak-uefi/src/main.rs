@@ -23,8 +23,164 @@ use uefi::table::boot::{AllocateType, MemoryType};
 
 use zamak_core::config;
 use zamak_core::elf;
+use zamak_core::linux_boot;
 use zamak_core::protocol;
 use zamak_core::rng::KaslrRng;
+
+/// Branch the post-ExitBootServices handoff between the Limine
+/// Protocol path (Rust-written kernels that want our page tables
+/// + scanned requests) and the Linux boot protocol path (BootParams
+/// zero page + 64-bit entry under UEFI identity mapping).
+enum KernelHandoff {
+    /// Limine Protocol: `root_phys` is the PML4 to install; `entry`
+    /// is the kernel's virtual entry.
+    Limine { root_phys: u64, entry: u64 },
+    /// Linux boot protocol: `boot_params_phys` is the physical
+    /// address of the 4 KiB zero page to pass in RSI; `entry` is
+    /// the 64-bit kernel entry physical address
+    /// (`kernel_load_phys + 0x200`).
+    Linux { boot_params_phys: u64, entry: u64 },
+}
+
+/// Translate a UEFI memory descriptor type to the E820 type code
+/// the Linux kernel expects. See `arch/x86/boot/e820.c` in the
+/// kernel for the canonical table.
+fn uefi_mem_ty_to_e820(ty: uefi::table::boot::MemoryType) -> u32 {
+    use uefi::table::boot::MemoryType as M;
+    match ty {
+        // Free memory that the kernel can reuse.
+        M::CONVENTIONAL
+        | M::LOADER_CODE
+        | M::LOADER_DATA
+        | M::BOOT_SERVICES_CODE
+        | M::BOOT_SERVICES_DATA => 1,
+        // Still-live after ExitBootServices — reserved for the firmware.
+        M::RUNTIME_SERVICES_CODE | M::RUNTIME_SERVICES_DATA => 2,
+        M::ACPI_RECLAIM => 3,
+        M::ACPI_NON_VOLATILE => 4,
+        M::UNUSABLE => 5,
+        // Everything else (MMIO, PAL code, reserved, persistent mem) → reserved.
+        _ => 2,
+    }
+}
+
+/// Loads a Linux bzImage from `bzimage`, populates BootParams + E820
+/// + cmdline (+ optional initrd), and returns a `KernelHandoff::Linux`
+/// variant with stable physical addresses. All allocations go through
+/// UEFI `LOADER_DATA` so they survive ExitBootServices.
+fn load_linux_kernel(
+    boot_services: &BootServices,
+    bzimage: &[u8],
+    cmdline: &str,
+    initrd: Option<&[u8]>,
+) -> KernelHandoff {
+    use linux_boot::{
+        kernel_load_address, kernel_offset, kernel_size, parse_setup_header, prepare_linux_boot,
+        MemoryRegion,
+    };
+
+    let header = parse_setup_header(bzimage).expect("bzImage: invalid setup header");
+
+    // Decide a physical load address. For relocatable kernels the
+    // bootloader may pick any 2-MiB-aligned address; we always ask
+    // UEFI for a fresh allocation so we don't collide with UEFI data.
+    let body_size = kernel_size(&header, bzimage.len());
+    let body_pages = (body_size + 0xFFF) / 0x1000;
+    let kernel_load_phys = boot_services
+        .allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_DATA, body_pages)
+        .expect("allocate bzImage kernel body");
+    // SAFETY: UEFI-allocated pages, page-aligned, uniquely owned here;
+    // we copy `body_size` bytes from the bzImage into them.
+    unsafe {
+        core::ptr::copy_nonoverlapping(
+            bzimage[kernel_offset(&header)..].as_ptr(),
+            kernel_load_phys as *mut u8,
+            body_size,
+        );
+    }
+    info!(
+        "Linux kernel body: {} bytes loaded at phys {:#x} (pref {:#x}, load-addr {:#x})",
+        body_size,
+        kernel_load_phys,
+        header.pref_address,
+        kernel_load_address(&header)
+    );
+
+    // Command line: one 4-KiB page. Truncate (at NUL) if too long.
+    let cmdline_phys = boot_services
+        .allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_DATA, 1)
+        .expect("allocate cmdline page");
+    let cmdline_bytes = cmdline.as_bytes();
+    let cmdline_copy = core::cmp::min(cmdline_bytes.len(), 0xFFF);
+    // SAFETY: freshly-allocated 4 KiB page, writable.
+    unsafe {
+        core::ptr::copy_nonoverlapping(
+            cmdline_bytes.as_ptr(),
+            cmdline_phys as *mut u8,
+            cmdline_copy,
+        );
+        // Ensure NUL terminator.
+        *(cmdline_phys as *mut u8).add(cmdline_copy) = 0;
+    }
+
+    // Optional initrd: copy into fresh UEFI-allocated pages.
+    let initrd_info = initrd.map(|blob| {
+        let pages = (blob.len() + 0xFFF) / 0x1000;
+        let phys = boot_services
+            .allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_DATA, pages)
+            .expect("allocate initrd");
+        unsafe {
+            core::ptr::copy_nonoverlapping(blob.as_ptr(), phys as *mut u8, blob.len());
+        }
+        info!(
+            "Linux initrd: {} bytes loaded at phys {:#x}",
+            blob.len(),
+            phys
+        );
+        let size: u32 = blob.len().try_into().expect("initrd > 4 GiB not supported");
+        (phys, size)
+    });
+
+    // Build an E820-style memory map from the UEFI memory map. Must be
+    // done *before* ExitBootServices (we're still inside Boot Services
+    // here); the resulting `Vec<MemoryRegion>` is a snapshot.
+    let mmap_size = boot_services.memory_map_size();
+    let mut mmap_buf = vec![0u8; mmap_size.map_size + 1024];
+    let mmap = boot_services
+        .memory_map(&mut mmap_buf)
+        .expect("get UEFI memory map");
+    let mut e820: Vec<MemoryRegion> = Vec::with_capacity(mmap.entries().count());
+    for desc in mmap.entries() {
+        e820.push(MemoryRegion {
+            base: desc.phys_start,
+            length: desc.page_count * 4096,
+            typ: uefi_mem_ty_to_e820(desc.ty),
+        });
+    }
+    info!("Linux: converted {} UEFI entries to E820", e820.len());
+
+    let image = prepare_linux_boot(bzimage, kernel_load_phys, cmdline_phys, initrd_info, &e820)
+        .expect("prepare_linux_boot failed");
+
+    // The zero page needs to survive ExitBootServices at a stable
+    // physical address; allocate a dedicated UEFI page and copy.
+    let bp_phys = boot_services
+        .allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_DATA, 1)
+        .expect("allocate BootParams zero page");
+    // SAFETY: 4-KiB UEFI-allocated page, exactly matches BootParams size.
+    unsafe {
+        core::ptr::copy_nonoverlapping(image.boot_params.as_ptr(), bp_phys as *mut u8, 4096);
+    }
+    info!(
+        "Linux BootParams at phys {:#x}, entry {:#x}",
+        bp_phys, image.entry_point
+    );
+
+    KernelHandoff::Linux {
+        boot_params_phys: bp_phys,
+        entry: image.entry_point,
+    }
+}
 
 /// UEFI input adapter used by the ZAMAK TUI. Arch-neutral.
 struct UefiInput<'a> {
@@ -377,7 +533,7 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     uefi_services::init(&mut system_table).unwrap();
     info!("Zamak starting up ({})...", env!("CARGO_PKG_VERSION"));
 
-    let mut boot_data = None;
+    let mut boot_data: Option<KernelHandoff> = None;
 
     {
         let boot_services = system_table.boot_services();
@@ -552,7 +708,10 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                 }
 
                 if let Some(entry) = config.entries.get(selected_idx) {
-                    info!("Booting entry: {}", entry.name);
+                    info!(
+                        "Booting entry: {} (PROTOCOL={})",
+                        entry.name, entry.protocol
+                    );
                     // The config parser stores KERNEL_PATH/PATH directly on
                     // `entry.kernel_path`; only unrecognised keys spill into
                     // `entry.options`. Fall back to the options map so any
@@ -587,6 +746,50 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                             _ => panic!("Kernel is a directory"),
                         };
                         let kernel_data = read_file(&mut k_file);
+
+                        // Dispatch on the entry's protocol. Linux uses its
+                        // own boot flow (BootParams + RSI + 64-bit jump);
+                        // everything else goes through the ELF / Limine
+                        // path.
+                        if entry.protocol.eq_ignore_ascii_case("linux") {
+                            // Optional initrd: first module, if any.
+                            let initrd_blob: Option<Vec<u8>> =
+                                if let Some(mod_cfg) = entry.modules.first() {
+                                    info!("Loading initrd: {}", mod_cfg.path);
+                                    let mut mod_path_buf = [0u16; 256];
+                                    let mut mi = 0;
+                                    for c in mod_cfg.path.chars() {
+                                        mod_path_buf[mi] =
+                                            if c == '/' { '\\' as u16 } else { c as u16 };
+                                        mi += 1;
+                                    }
+                                    let u_mod_path =
+                                        uefi::CStr16::from_u16_with_nul(&mod_path_buf[..mi + 1])
+                                            .expect("CStr16 for initrd");
+                                    let mh = root
+                                        .open(u_mod_path, FileMode::Read, FileAttribute::empty())
+                                        .expect("open initrd");
+                                    let mut mf = match mh.into_type().expect("initrd file type") {
+                                        uefi::proto::media::file::FileType::Regular(f) => f,
+                                        _ => panic!("initrd is a directory"),
+                                    };
+                                    Some(read_file(&mut mf))
+                                } else {
+                                    None
+                                };
+
+                            let handoff = load_linux_kernel(
+                                boot_services,
+                                &kernel_data,
+                                &entry.cmdline,
+                                initrd_blob.as_deref(),
+                            );
+                            boot_data = Some(handoff);
+                            k_file.close();
+                            file.close();
+                            break;
+                        }
+
                         let mut elf_info =
                             elf::parse_elf(&kernel_data).expect("Failed to parse ELF");
 
@@ -723,7 +926,10 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                         // x86_64 / aarch64 / riscv64 / loongarch64 in
                         // the `paging` module.
                         let root_phys = paging::build(boot_services, &loaded_kernel);
-                        boot_data = Some((root_phys, elf_info.entry));
+                        boot_data = Some(KernelHandoff::Limine {
+                            root_phys,
+                            entry: elf_info.entry,
+                        });
 
                         k_file.close();
                     }
@@ -734,17 +940,40 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
         }
     }
 
-    if let Some((root_table_phys, entry_point)) = boot_data {
-        info!(
-            "Exiting boot services and jumping to kernel at {:#x}",
-            entry_point
-        );
-        let (_st, _mmap_iter) = system_table.exit_boot_services();
-        // SAFETY: ExitBootServices has succeeded; the caller built the
-        // page tables rooted at `root_table_phys` earlier and placed
-        // the kernel at `entry_point`. This call never returns.
-        unsafe {
-            handoff::jump_to_kernel(root_table_phys, entry_point);
+    if let Some(handoff_kind) = boot_data {
+        match handoff_kind {
+            KernelHandoff::Limine { root_phys, entry } => {
+                info!(
+                    "Exiting boot services and jumping to Limine kernel at {:#x}",
+                    entry
+                );
+                let (_st, _mmap_iter) = system_table.exit_boot_services();
+                // SAFETY: ExitBootServices has succeeded; the caller built the
+                // page tables rooted at `root_phys` earlier and placed the
+                // kernel at `entry`. This call never returns.
+                unsafe {
+                    handoff::jump_to_kernel(root_phys, entry);
+                }
+            }
+            KernelHandoff::Linux {
+                boot_params_phys,
+                entry,
+            } => {
+                info!(
+                    "Exiting boot services and jumping to Linux kernel at {:#x} (RSI={:#x})",
+                    entry, boot_params_phys
+                );
+                let (_st, _mmap_iter) = system_table.exit_boot_services();
+                // SAFETY: ExitBootServices has succeeded; the caller built the
+                // BootParams zero page at `boot_params_phys` and populated E820
+                // from the UEFI memory map. This call never returns; Linux sets
+                // up its own page tables under UEFI's identity mapping (which
+                // `paging::x86::build` extended to cover low physical memory in
+                // v0.8.0).
+                unsafe {
+                    handoff::jump_to_linux_kernel(boot_params_phys, entry);
+                }
+            }
         }
     }
 

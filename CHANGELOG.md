@@ -12,6 +12,29 @@ All dates use ISO 8601 format (YYYY-MM-DD).
 
 ## [Unreleased]
 
+### Added
+
+- **M2-12 done** — end-to-end Linux bzImage boot smoke under QEMU
+  UEFI. New `zamak-linux-stub-kernel` freestanding crate emits a
+  spec-compliant protocol-2.15 bzImage (`HdrS` magic at 0x202,
+  `setup_sects = 1`, 64-bit entry at `load_addr + 0x200`) whose
+  kernel body prints `Linux version 0.0.0-zamak-stub` on COM1 and
+  exits via `isa-debug-exit`. `zamak-core::linux_boot` gains
+  `prepare_linux_boot()` — an orchestrator that walks
+  `SetupHeader` + allocates BootParams + populates E820 from a
+  caller-supplied `[MemoryRegion]`. `zamak-uefi` now dispatches
+  on `entry.protocol`: `"linux"` routes through a new
+  `load_linux_kernel()` that converts the UEFI memory map to E820,
+  allocates stable physical pages for kernel body + cmdline +
+  optional initrd + BootParams zero page, then hands off via
+  `handoff::jump_to_linux_kernel` (new) which sets RSI and does
+  a bare `jmp entry` without installing a ZAMAK PML4 (Linux uses
+  UEFI's identity map and sets up its own paging). `build-images.sh`
+  assembles `target/linux-esp.img` with the stub and a
+  `PROTOCOL=linux` config; CI's `qemu-smoke` job runs the new
+  `linux-bzimage` suite alongside `boot-smoke` and
+  `asm-verification`, all three green.
+
 ## [0.8.3] - 2026-04-24
 
 Third release-workflow patch. v0.8.2 produced 6/9 expected assets

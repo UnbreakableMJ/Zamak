@@ -44,6 +44,16 @@ pub enum LinuxBootError {
     InvalidSetupSects,
     /// The protected-mode kernel is empty.
     EmptyKernel,
+    /// Kernel load physical address doesn't fit in the `code32_start`
+    /// 32-bit field (> 4 GiB).
+    KernelLoadAddrOverflow,
+    /// Command-line physical address doesn't fit in `cmd_line_ptr`
+    /// (> 4 GiB).
+    CmdlineAddrOverflow,
+    /// Initramfs physical address doesn't fit in `ramdisk_image`
+    /// (> 4 GiB). Protocol 2.15 only widens this to 64 bits via
+    /// `ext_ramdisk_image`; stick to < 4 GiB until we wire it up.
+    InitrdAddrOverflow,
 }
 
 impl fmt::Display for LinuxBootError {
@@ -56,6 +66,11 @@ impl fmt::Display for LinuxBootError {
             }
             Self::InvalidSetupSects => write!(f, "setup_sects is zero"),
             Self::EmptyKernel => write!(f, "protected-mode kernel payload is empty"),
+            Self::KernelLoadAddrOverflow => {
+                write!(f, "kernel load address > 4 GiB")
+            }
+            Self::CmdlineAddrOverflow => write!(f, "cmdline address > 4 GiB"),
+            Self::InitrdAddrOverflow => write!(f, "initrd address > 4 GiB"),
         }
     }
 }
@@ -346,6 +361,116 @@ impl BootParams {
     }
 }
 
+/// Returned by [`prepare_linux_boot`]: a fully-populated
+/// `BootParams` zero page plus the 64-bit entry point the
+/// caller should jump to after ExitBootServices.
+pub struct LinuxBootImage {
+    /// Zero page to pass to the kernel (RSI at handoff).
+    pub boot_params: BootParams,
+    /// Physical address of the 64-bit kernel entry.
+    /// Always `kernel_load_phys + 0x200` per protocol 2.12+.
+    pub entry_point: u64,
+}
+
+impl fmt::Debug for LinuxBootImage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // BootParams is a 4 KiB blob; dumping its bytes is not
+        // useful in logs. Print just the entry point and let the
+        // struct name convey the rest.
+        f.debug_struct("LinuxBootImage")
+            .field("entry_point", &format_args!("{:#x}", self.entry_point))
+            .field("boot_params", &"<BootParams 4096-byte zero page>")
+            .finish()
+    }
+}
+
+/// One memory-map region in E820 terms. The caller translates
+/// its firmware memory map (UEFI GetMemoryMap, BIOS INT 15h E820,
+/// …) into a slice of these for [`prepare_linux_boot`].
+///
+/// E820 types follow the de-facto convention:
+/// `1 = usable`, `2 = reserved`, `3 = ACPI reclaimable`,
+/// `4 = ACPI NVS`, `5 = unusable`, `7 = persistent memory`.
+#[derive(Debug, Clone, Copy)]
+pub struct MemoryRegion {
+    pub base: u64,
+    pub length: u64,
+    pub typ: u32,
+}
+
+/// End-to-end preparation of a Linux 64-bit handoff.
+///
+/// The caller is expected to have already:
+///   * Read the bzImage into `bzimage: &[u8]`.
+///   * Allocated `kernel_size(&hdr, bzimage.len())` bytes of
+///     physical memory at `kernel_load_phys` (2-MiB-aligned when
+///     the kernel is relocatable, else at the returned
+///     `kernel_load_address(&hdr)`) and copied the kernel body
+///     (`bzimage[setup_size..]`) into it.
+///   * Allocated a writable page for the command line at
+///     `cmdline_phys` and stored an (optionally NUL-terminated)
+///     copy of `entry.cmdline`.
+///   * Allocated pages for an initramfs at `initrd.0` of length
+///     `initrd.1` bytes (or passed `None`).
+///   * Produced a firmware memory map as `memory_map`.
+///
+/// Returns a `LinuxBootImage` holding the fully-populated
+/// `BootParams` zero page and the 64-bit entry physical address.
+/// Call [`crate::arch`]-agnostic handoff code (e.g.
+/// `zamak-uefi::handoff::jump_to_linux_kernel`) with
+/// `image.boot_params.as_ptr() as u64` in RSI and
+/// `image.entry_point` in RIP.
+pub fn prepare_linux_boot(
+    bzimage: &[u8],
+    kernel_load_phys: u64,
+    cmdline_phys: u64,
+    initrd: Option<(u64, u32)>,
+    memory_map: &[MemoryRegion],
+) -> Result<LinuxBootImage, LinuxBootError> {
+    let header = parse_setup_header(bzimage)?;
+
+    let mut boot_params = BootParams::zeroed();
+    boot_params.populate_from_bzimage(bzimage, &header);
+
+    // Record where we actually loaded the kernel — the kernel
+    // uses this as its effective `code32_start` post-relocation.
+    let load_phys_u32: u32 = kernel_load_phys
+        .try_into()
+        .map_err(|_| LinuxBootError::KernelLoadAddrOverflow)?;
+    boot_params.set_code32_start(load_phys_u32);
+
+    let cmdline_phys_u32: u32 = cmdline_phys
+        .try_into()
+        .map_err(|_| LinuxBootError::CmdlineAddrOverflow)?;
+    boot_params.set_cmdline(cmdline_phys_u32);
+
+    if let Some((initrd_phys, initrd_size)) = initrd {
+        let initrd_phys_u32: u32 = initrd_phys
+            .try_into()
+            .map_err(|_| LinuxBootError::InitrdAddrOverflow)?;
+        boot_params.set_initrd(initrd_phys_u32, initrd_size);
+    }
+
+    for region in memory_map {
+        // Silently drop once the 128-entry table is full — the
+        // kernel tolerates a short E820, it just sees less RAM.
+        if !boot_params.add_e820_entry(region.base, region.length, region.typ) {
+            break;
+        }
+    }
+
+    // 64-bit entry is always 0x200 past the kernel's load
+    // physical base (Linux boot protocol 2.12+).
+    let entry_point = kernel_load_phys
+        .checked_add(0x200)
+        .ok_or(LinuxBootError::KernelLoadAddrOverflow)?;
+
+    Ok(LinuxBootImage {
+        boot_params,
+        entry_point,
+    })
+}
+
 // §3.9.7: Compile-time layout verification.
 const _: () = {
     assert!(
@@ -543,5 +668,107 @@ mod tests {
         let mut bp = BootParams::zeroed();
         bp.data[offsets::E820_ENTRIES] = offsets::E820_MAX as u8;
         assert!(!bp.add_e820_entry(0, 0x1000, 1));
+    }
+
+    // ─── prepare_linux_boot orchestrator ────────────────────────
+
+    #[test]
+    fn prepare_rejects_tiny_bzimage() {
+        let err = prepare_linux_boot(&[0u8; 16], 0x1000_0000, 0x2000, None, &[]).unwrap_err();
+        assert_eq!(err, LinuxBootError::ImageTooSmall);
+    }
+
+    #[test]
+    fn prepare_rejects_bad_magic() {
+        let mut img = mk_bzimage(0x020F, true, 1);
+        // Corrupt the magic.
+        img[0x202] = 0xDE;
+        let err = prepare_linux_boot(&img, 0x1000_0000, 0x2000, None, &[]).unwrap_err();
+        assert_eq!(err, LinuxBootError::InvalidMagic);
+    }
+
+    #[test]
+    fn prepare_rejects_kernel_load_above_4gib() {
+        let img = mk_bzimage(0x020F, true, 1);
+        let err = prepare_linux_boot(&img, 0x1_0000_0000, 0x2000, None, &[]).unwrap_err();
+        assert_eq!(err, LinuxBootError::KernelLoadAddrOverflow);
+    }
+
+    #[test]
+    fn prepare_rejects_cmdline_above_4gib() {
+        let img = mk_bzimage(0x020F, true, 1);
+        let err = prepare_linux_boot(&img, 0x1000_0000, 0x1_0000_0000, None, &[]).unwrap_err();
+        assert_eq!(err, LinuxBootError::CmdlineAddrOverflow);
+    }
+
+    #[test]
+    fn prepare_rejects_initrd_above_4gib() {
+        let img = mk_bzimage(0x020F, true, 1);
+        let err = prepare_linux_boot(
+            &img,
+            0x1000_0000,
+            0x2000,
+            Some((0x1_0000_0000, 0x1000)),
+            &[],
+        )
+        .unwrap_err();
+        assert_eq!(err, LinuxBootError::InitrdAddrOverflow);
+    }
+
+    #[test]
+    fn prepare_happy_path_populates_boot_params() {
+        let img = mk_bzimage(0x020F, true, 1);
+        let mem_map = [
+            MemoryRegion {
+                base: 0,
+                length: 0x9F000,
+                typ: 1,
+            },
+            MemoryRegion {
+                base: 0x10_0000,
+                length: 0x1000_0000,
+                typ: 1,
+            },
+        ];
+        let boot = prepare_linux_boot(
+            &img,
+            0x0200_0000,                    // kernel at 32 MiB
+            0x0010_0000,                    // cmdline at 1 MiB
+            Some((0x0100_0000, 0x40_0000)), // initrd at 16 MiB, 4 MiB long
+            &mem_map,
+        )
+        .expect("prepare_linux_boot should succeed");
+
+        // Entry is always kernel_load_phys + 0x200.
+        assert_eq!(boot.entry_point, 0x0200_0000 + 0x200);
+
+        let bp = &boot.boot_params.data;
+
+        // code32_start (0x214) holds the kernel_load_phys.
+        assert_eq!(
+            u32::from_le_bytes(bp[0x214..0x218].try_into().unwrap()),
+            0x0200_0000,
+        );
+        // cmd_line_ptr (0x228).
+        assert_eq!(
+            u32::from_le_bytes(bp[0x228..0x22C].try_into().unwrap()),
+            0x0010_0000,
+        );
+        // ramdisk_image (0x218) / ramdisk_size (0x21C).
+        assert_eq!(
+            u32::from_le_bytes(bp[0x218..0x21C].try_into().unwrap()),
+            0x0100_0000,
+        );
+        assert_eq!(
+            u32::from_le_bytes(bp[0x21C..0x220].try_into().unwrap()),
+            0x40_0000,
+        );
+        // E820 entry count (0x1E8).
+        assert_eq!(bp[offsets::E820_ENTRIES], 2);
+        // First E820 entry at 0x2D0: base=0, len=0x9F000, typ=1.
+        let e0 = &bp[offsets::E820_TABLE..offsets::E820_TABLE + 20];
+        assert_eq!(u64::from_le_bytes(e0[0..8].try_into().unwrap()), 0);
+        assert_eq!(u64::from_le_bytes(e0[8..16].try_into().unwrap()), 0x9F000);
+        assert_eq!(u32::from_le_bytes(e0[16..20].try_into().unwrap()), 1);
     }
 }

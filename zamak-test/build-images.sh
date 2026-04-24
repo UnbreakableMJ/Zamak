@@ -160,4 +160,43 @@ mcopy -i "${ASM_VERIFY_IMG}" \
 mcopy -i "${ASM_VERIFY_IMG}" "${ASM_VERIFY_CONF}" ::/zamak.conf
 mcopy -i "${ASM_VERIFY_IMG}" "${ASM_VERIFY_ELF}" ::/asm-verify-kernel.elf
 
-echo "[build-images] wrote ${ESP}, ${BIOS_IMG}, ${ASM_VERIFY_IMG}"
+# 10. Linux-smoke ESP — stub bzImage + zamak.conf with
+#     PROTOCOL=linux + console=ttyS0 so the stub kernel prints
+#     on the UEFI serial channel the harness reads. The stub is
+#     NOT a real Linux kernel; it exists purely to exercise
+#     zamak-uefi's Linux-Boot-Protocol plumbing (dispatch on
+#     PROTOCOL, BootParams population, RSI-aware handoff) in
+#     `zamak-test --suite linux-bzimage` (M2-12).
+echo "[build-images] building zamak-linux-stub-kernel..."
+(cd "${ZAMAK_ROOT}/zamak-linux-stub-kernel" && cargo +nightly build --release)
+STUB_ELF="${ZAMAK_ROOT}/zamak-linux-stub-kernel/target/x86_64-unknown-none/release/zamak-linux-stub-kernel"
+STUB_BZI="${TARGET_DIR}/zamak-linux-stub.bzi"
+# `objcopy -O binary` drops everything but SHF_ALLOC sections —
+# rust-lld still emits `.dynsym`/`.gnu.hash`/etc. before `.boot`,
+# so the resulting raw file starts in the middle of those. Extract
+# just the `.boot` section (the hand-laid bzImage blob) with
+# `--dump-section` instead.
+objcopy --dump-section ".boot=${STUB_BZI}" "${STUB_ELF}"
+
+LINUX_CONF="${TARGET_DIR}/linux.conf"
+cat > "${LINUX_CONF}" <<'EOF'
+TIMEOUT=0
+DEFAULT_ENTRY=1
+
+/zamak-linux-stub
+    PROTOCOL=linux
+    KERNEL_PATH=/bzImage
+    CMDLINE=console=ttyS0
+EOF
+
+LINUX_ESP="${TARGET_DIR}/linux-esp.img"
+dd if=/dev/zero of="${LINUX_ESP}" bs=1M count=64 status=none
+mformat -F -i "${LINUX_ESP}" ::
+mmd -i "${LINUX_ESP}" ::/EFI ::/EFI/BOOT
+mcopy -i "${LINUX_ESP}" \
+    "${ZAMAK_ROOT}/target/x86_64-unknown-uefi/release/zamak-uefi.efi" \
+    ::/EFI/BOOT/BOOTX64.EFI
+mcopy -i "${LINUX_ESP}" "${LINUX_CONF}" ::/zamak.conf
+mcopy -i "${LINUX_ESP}" "${STUB_BZI}" ::/bzImage
+
+echo "[build-images] wrote ${ESP}, ${BIOS_IMG}, ${ASM_VERIFY_IMG}, ${LINUX_ESP}"

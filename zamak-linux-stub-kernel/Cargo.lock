@@ -3,12 +3,5 @@
 version = 4
 
 [[package]]
-name = "zamak-proto"
+name = "zamak-linux-stub-kernel"
 version = "0.8.3"
-
-[[package]]
-name = "zamak-test-kernel"
-version = "0.8.3"
-dependencies = [
- "zamak-proto",
-]

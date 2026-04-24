@@ -13,11 +13,13 @@ members = [
     "zamak-test",
     "zamak-macros",
 ]
-# zamak-test-kernel is excluded from the workspace so its own
-# .cargo/config.toml (with `build-std`) can apply without the workspace's
-# stable-toolchain alias interfering. Build it explicitly with:
+# zamak-test-kernel + zamak-linux-stub-kernel are excluded from the
+# workspace so their own `.cargo/config.toml` (with `build-std`) can
+# apply without the workspace's stable-toolchain alias interfering.
+# Build them explicitly with:
 #     cargo +nightly build --manifest-path zamak-test-kernel/Cargo.toml --release
-exclude = ["zamak-test-kernel"]
+#     cargo +nightly build --manifest-path zamak-linux-stub-kernel/Cargo.toml --release
+exclude = ["zamak-test-kernel", "zamak-linux-stub-kernel"]
 resolver = "2"
 
 [profile.dev]

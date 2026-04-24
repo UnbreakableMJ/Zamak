@@ -59,6 +59,47 @@ pub unsafe fn jump_to_kernel(root_table: RootTableAddr, entry_point: u64) -> ! {
     entry_ptr();
 }
 
+/// Linux 64-bit boot-protocol hand-off (x86-64 only).
+///
+/// Runs under UEFI's identity mapping (which `paging::x86::build`
+/// extends to cover all physical memory, added in v0.8.0). Linux's
+/// startup_64 sets up its own page tables, so we do NOT install a
+/// ZAMAK PML4 here.
+///
+/// Per the 64-bit boot protocol:
+/// - Interrupts disabled (CLI).
+/// - RSI = physical address of `boot_params` zero page.
+/// - CS = flat 64-bit code segment from the current GDT (already
+///   set by UEFI), RFLAGS.IF = 0, all other GPRs zero.
+///
+/// # Safety
+///
+/// - `ExitBootServices` must have succeeded.
+/// - `boot_params_phys` must point to a fully-populated 4 KiB zero
+///   page (see `zamak_core::linux_boot::prepare_linux_boot`).
+/// - `entry_point` must be `kernel_load_phys + 0x200` of a bzImage
+///   the caller loaded and whose `code32_start` field is set
+///   accordingly.
+/// - Does not return.
+#[cfg(target_arch = "x86_64")]
+#[inline(always)]
+pub unsafe fn jump_to_linux_kernel(boot_params_phys: u64, entry_point: u64) -> ! {
+    // Linux 64-bit boot protocol only strictly requires RSI to hold the
+    // boot_params physical address and interrupts to be disabled; the
+    // kernel initializes every other GPR itself in startup_64. Earlier
+    // versions of this function `xor`ed every register before the final
+    // jmp — which clobbered the compiler-allocated temporaries holding
+    // `bp` and `entry` and sent execution to RIP=0 / 0xA0000 with RSI=0.
+    core::arch::asm!(
+        "cli",
+        "mov rsi, {bp}",
+        "jmp {entry}",
+        bp = in(reg) boot_params_phys,
+        entry = in(reg) entry_point,
+        options(noreturn, nostack),
+    )
+}
+
 /// AArch64 kernel hand-off: disable interrupts, program MAIR/TCR/TTBR,
 /// flush TLB, and jump to the kernel.
 #[cfg(target_arch = "aarch64")]

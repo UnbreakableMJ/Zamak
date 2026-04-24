@@ -134,7 +134,7 @@ SPDX-FileCopyrightText: 2026 Mohamed Hammad
 | M2-9 | `[✓]` | VMM / HHDM mapping — full HHDM covering all physical memory via E820/UEFI memory map (§FR-MM-002) |
 | M2-10 | `[✓]` | `ExitBootServices()` retry logic — handled by `uefi` crate v0.24 internally (§6.2) |
 | M2-11 | `[✓]` | Linux Boot Protocol support — x86 bzImage setup header parsing, BootParams zero page, E820 population (§FR-PROTO-002) |
-| M2-12 | `[~]` | End-to-end Linux bzImage boot under QEMU UEFI — `linux-bzimage` suite + `ZAMAK_LINUX_ESP` env in `zamak-test`; awaits real bzImage + UEFI initrd in CI |
+| M2-12 | `[✓]` | End-to-end Linux bzImage boot under QEMU UEFI — new `zamak-linux-stub-kernel` crate produces a spec-compliant protocol-2.15 bzImage blob; `zamak-uefi` dispatches on `PROTOCOL=linux`, populates BootParams + E820 from UEFI mmap, jumps via a Linux-specific handoff that sets RSI pre-`jmp`. `cargo run -p zamak-test -- --suite linux-bzimage` prints `[PASS] uefi-linux-boot` locally and in CI. Real Linux kernel coverage is a future `linux-full-boot` suite. |
 | M2-13 | `[✓]` | Build and produce `BOOTX64.EFI` release artifact (`Makefile.uefi` with ESP image + QEMU target) |
 
 ---
@@ -306,7 +306,7 @@ SPDX-FileCopyrightText: 2026 Mohamed Hammad
 | Rust Guidelines | 5 | 0 | 0 |
 | POSIX | 2 | 0 | 0 |
 | M1 BIOS Boot | 15 | 1 | 0 |
-| M2 UEFI Boot | 12 | 1 | 0 |
+| M2 UEFI Boot | 13 | 0 | 0 |
 | M3 Config/Menu/Theme | 15 | 0 | 0 |
 | M4 Multi-arch | 7 | 1 | 0 |
 | M5 Feature Parity | 9 | 0 | 0 |
@@ -316,10 +316,10 @@ SPDX-FileCopyrightText: 2026 Mohamed Hammad
 | Testing | 7 | 0 | 0 |
 | CI/CD | 12 | 0 | 0 |
 | Release Artifacts | 10 | 0 | 0 |
-| **Total** | **154** | **4** | **0** |
+| **Total** | **155** | **3** | **0** |
 
-**No items are fully not-started.** The 4 remaining `[~]` items are:
+**No items are fully not-started.** The 3 remaining `[~]` items are:
 
-- **CI artifact confirmation** (2 items): `bios-boot-smoke` on `zamak-test-kernel` (M1-16) — needs real stage1 MBR chain; Linux bzImage UEFI smoke (M2-12) — needs a real bzImage committed or synthesized by CI. TEST-4 and TEST-5 are now `[✓]` for the UEFI x86-64 path.
+- **CI artifact confirmation** (1 item): `bios-boot-smoke` on `zamak-test-kernel` (M1-16) — needs the `call_bios_int` trampoline fix or real-mode I/O refactor. M2-12 now satisfied via the `zamak-linux-stub-kernel` synthetic bzImage; TEST-4 and TEST-5 are `[✓]` for the UEFI x86-64 path.
 - **LoongArch UEFI target** (M6-1): blocked on rustc upstream — `loongarch64-unknown-uefi` target does not yet exist, and `uefi-services`' `efiapi` ABI is unsupported on `loongarch64-unknown-none`. Paging builder + handoff code are implemented and compile for the bare-metal target; flips to `[✓]` when rustc lands the UEFI triple.
 - **Real hardware perf baseline** (M6-3): cold-boot timing requires bare-metal measurement on reference hardware.

@@ -205,6 +205,11 @@ jobs:
           ZAMAK_UEFI_ESP: target/esp.img
           OVMF_DIR: /usr/share/OVMF
         run: cargo run -p zamak-test -- --suite boot-smoke --timeout 60
+      - name: run linux-bzimage suite under QEMU
+        env:
+          ZAMAK_LINUX_ESP: target/linux-esp.img
+          OVMF_DIR: /usr/share/OVMF
+        run: cargo run -p zamak-test -- --suite linux-bzimage --timeout 60
 
   sbom:
     runs-on: ubuntu-latest
