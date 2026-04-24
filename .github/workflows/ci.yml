@@ -147,10 +147,15 @@ jobs:
           components: rust-src
           targets: ${{ matrix.target }}
       - name: cargo build --target ${{ matrix.target }}
+        # The `|| true` tolerance was removed in v0.8.5 — with the
+        # current source tree all four UEFI targets build clean
+        # under `-D warnings`, and silent failures had previously
+        # let a broken commit (missing `#[cfg(target_arch=...)]` on
+        # the Linux handoff) reach a tag without CI noticing.
         run: |
           cargo build -p zamak-uefi --target ${{ matrix.target }} \
             -Z build-std=core,alloc,compiler_builtins \
-            -Z build-std-features=compiler-builtins-mem || true
+            -Z build-std-features=compiler-builtins-mem
 
   size-gate:
     runs-on: ubuntu-latest

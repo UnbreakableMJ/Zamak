@@ -12,6 +12,37 @@ All dates use ISO 8601 format (YYYY-MM-DD).
 
 ## [Unreleased]
 
+## [0.8.5] - 2026-04-24
+
+Bundles the M6-3 part 1 boot-phase instrumentation plus a
+non-x86 UEFI build regression fix that v0.8.4's release
+workflow surfaced (AArch64 / RISC-V / LoongArch cross builds
+failed strict compilation because the Linux-Boot-Protocol
+dispatch added in M2-12 wasn't gated to `target_arch =
+"x86_64"`; the `cross` CI job had been masking it with
+`|| true` since v0.6.x).
+
+v0.8.4's GH Release page has the x86-64 assets only
+(BOOTX64.EFI + CLI binaries + SBOM + SHA256SUMS). Use v0.8.5
+for the full 4-arch UEFI asset set.
+
+### Fixed
+
+- **Non-x86 UEFI strict builds** (`zamak-uefi/src/main.rs`,
+  `zamak-uefi/src/handoff.rs`) — gated `KernelHandoff::Linux`,
+  `load_linux_kernel()`, `uefi_mem_ty_to_e820()`, and the
+  `zamak_core::linux_boot` import behind
+  `#[cfg(target_arch = "x86_64")]` so the compile_error-free
+  build holds on all four UEFI targets. AArch64 Linux booting
+  uses PE/COFF + EFI-stub (a different surface) and was never
+  intended to go through the bzImage path.
+- **CI `cross` job no longer swallows build errors**
+  (`.github` + `.forgejo` workflow mirrors) — removed the
+  `|| true` tolerance on `cargo build -p zamak-uefi`. With the
+  Linux-path gating in place all four targets build clean
+  under `-D warnings`; silent failure had previously let the
+  v0.8.4 tag ship with broken non-x86 binaries.
+
 ### Added
 
 - **M6-3 part 1 — boot-phase TSC instrumentation**. `zamak-uefi`

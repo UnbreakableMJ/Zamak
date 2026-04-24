@@ -23,6 +23,7 @@ use uefi::table::boot::{AllocateType, MemoryType};
 
 use zamak_core::config;
 use zamak_core::elf;
+#[cfg(target_arch = "x86_64")]
 use zamak_core::linux_boot;
 use zamak_core::protocol;
 use zamak_core::rng::KaslrRng;
@@ -39,12 +40,19 @@ enum KernelHandoff {
     /// address of the 4 KiB zero page to pass in RSI; `entry` is
     /// the 64-bit kernel entry physical address
     /// (`kernel_load_phys + 0x200`).
+    /// x86-64 only — the Linux boot protocol and
+    /// `handoff::jump_to_linux_kernel` are x86-specific. AArch64
+    /// Linux booting uses PE/COFF + EFI stub and is out of scope.
+    #[cfg(target_arch = "x86_64")]
     Linux { boot_params_phys: u64, entry: u64 },
 }
 
 /// Translate a UEFI memory descriptor type to the E820 type code
 /// the Linux kernel expects. See `arch/x86/boot/e820.c` in the
 /// kernel for the canonical table.
+///
+/// x86-64 only: `load_linux_kernel` is the sole caller.
+#[cfg(target_arch = "x86_64")]
 fn uefi_mem_ty_to_e820(ty: uefi::table::boot::MemoryType) -> u32 {
     use uefi::table::boot::MemoryType as M;
     match ty {
@@ -68,6 +76,10 @@ fn uefi_mem_ty_to_e820(ty: uefi::table::boot::MemoryType) -> u32 {
 /// + cmdline (+ optional initrd), and returns a `KernelHandoff::Linux`
 /// variant with stable physical addresses. All allocations go through
 /// UEFI `LOADER_DATA` so they survive ExitBootServices.
+///
+/// x86-64 only: the Linux Boot Protocol entry convention (RSI =
+/// BootParams phys; 64-bit entry at `load + 0x200`) is x86-specific.
+#[cfg(target_arch = "x86_64")]
 fn load_linux_kernel(
     boot_services: &BootServices,
     bzimage: &[u8],
@@ -835,6 +847,14 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                         // own boot flow (BootParams + RSI + 64-bit jump);
                         // everything else goes through the ELF / Limine
                         // path.
+                        //
+                        // The Linux leg is x86-64 only; non-x86 UEFI
+                        // builds fall through to the Limine path and let
+                        // the ELF parser decide whether the image is
+                        // valid. Linux on AArch64 uses PE/COFF +
+                        // EFI-stub rather than bzImage, which is a
+                        // separate future surface.
+                        #[cfg(target_arch = "x86_64")]
                         if entry.protocol.eq_ignore_ascii_case("linux") {
                             // Optional initrd: first module, if any.
                             let initrd_blob: Option<Vec<u8>> =
@@ -1042,6 +1062,7 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                     handoff::jump_to_kernel(root_phys, entry);
                 }
             }
+            #[cfg(target_arch = "x86_64")]
             KernelHandoff::Linux {
                 boot_params_phys,
                 entry,
