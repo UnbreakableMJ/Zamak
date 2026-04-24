@@ -28,8 +28,11 @@ use core::arch::global_asm;
 // must fit in exactly 512 bytes as a single contiguous block. The boot signature
 // at offset 510 and patchable fields at fixed offsets require .org directives
 // that only work within one assembly section.
+// NOTE: rustc's `global_asm!` default is Intel syntax on x86 targets, so
+// no `.intel_syntax noprefix` / `.att_syntax prefix` directives are
+// emitted around this block — newer nightlies warn about redundant
+// switches and our CI runs with `-D warnings`.
 global_asm!(
-    ".intel_syntax noprefix",
     ".pushsection .mbr, \"ax\"",
     ".code16",
     ".global mbr_start",
@@ -123,5 +126,4 @@ global_asm!(
     // Boot signature at offset 510.
     ".word 0xAA55",
     ".popsection",
-    ".att_syntax prefix",
 );

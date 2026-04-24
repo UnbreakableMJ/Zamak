@@ -30,6 +30,7 @@ pub mod vbe;
 
 use core::panic::PanicInfo;
 use disk::Disk;
+#[allow(unused_imports)]
 use fat32::Fat32;
 use mmap::get_memory_map;
 
@@ -461,6 +462,7 @@ pub extern "C" fn kmain(drive_id: u8) -> ! {
     loop {}
 }
 
+#[allow(dead_code)]
 fn println(vga: *mut u8, line: isize, msg: &str, color: u8) {
     for (i, &byte) in msg.as_bytes().iter().enumerate() {
         // SAFETY: vga points to 0xB8000 VGA text buffer (80x25x2 = 4000 bytes);

@@ -3,6 +3,7 @@
 
 use alloc::string::String;
 use alloc::vec;
+#[allow(unused_imports)]
 use alloc::vec::Vec;
 use zamak_core::fs::{BlockDevice, Error, FileEntry, FileSystem, FileType};
 

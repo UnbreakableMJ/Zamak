@@ -30,8 +30,11 @@ use core::arch::global_asm;
 // sections share labels and data and must be linked as a single contiguous unit.
 // The call_bios_int function alone requires ~40 instructions because it performs
 // a full 32→16→real→16→32 mode round-trip to invoke BIOS interrupts.
+// NOTE: `global_asm!`'s default on x86 is Intel syntax — no
+// `.intel_syntax`/`.att_syntax` directives here (they became
+// `-D bad_asm_style` on modern rustc and CI runs with
+// `-D warnings`).
 global_asm!(
-    ".intel_syntax noprefix",
     // =========================================================================
     // 16-bit Real Mode Entry
     // =========================================================================
@@ -210,5 +213,4 @@ global_asm!(
     ".align 4",
     "esp_save_ptr:",
     "    .long 0",
-    ".att_syntax prefix",
 );
