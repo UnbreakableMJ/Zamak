@@ -6,6 +6,7 @@
 //! envelope, plus any side effects (writes, prints) that its
 //! contract requires.
 
+pub mod bench;
 pub mod completions;
 pub mod describe;
 pub mod enroll_config;

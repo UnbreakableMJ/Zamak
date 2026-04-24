@@ -528,9 +528,90 @@ fn fulfill_requests(
 pub static ZAMAK_ENROLLED_HASH: zamak_core::enrolled_hash::EnrolledHashSlot =
     zamak_core::enrolled_hash::EnrolledHashSlot::empty();
 
+/// M6-3 instrumentation: emit one `ZAMAK_PHASE=<name> tsc=<u64>` line
+/// per checkpoint. Consumed by `zamak-cli bench parse-serial` off a
+/// captured UEFI serial log to compute phase deltas (cycles / ns).
+///
+/// `info!` already routes through `uefi_services`' logger to the UEFI
+/// console + COM1 (OVMF / real hardware with serial-redirect), so no
+/// extra plumbing is needed — the mark is observable alongside normal
+/// `[ INFO ]` lines.
+#[cfg(target_arch = "x86_64")]
+fn mark_phase(phase: &str) {
+    let tsc = zamak_core::arch::x86::rdtsc();
+    info!("ZAMAK_PHASE={phase} tsc={tsc}");
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+fn mark_phase(_phase: &str) {
+    // Non-x86 UEFI targets don't have `rdtsc`; skip silently. AArch64
+    // etc. can land an equivalent generic-timer read in a follow-up.
+}
+
+/// Emit the TSC frequency (in MHz) at boot start, when discoverable.
+///
+/// Uses CPUID leaf 0x16 (Processor Frequency Information), available
+/// on Skylake-era and newer Intel / AMD parts. Emits
+/// `ZAMAK_TSC_MHZ=<n>` when EAX reports a non-zero base frequency, or
+/// `ZAMAK_TSC_MHZ=unknown` otherwise (caller of `bench parse-serial`
+/// can then pass `--tsc-mhz <n>` manually based on the host SKU).
+#[cfg(target_arch = "x86_64")]
+fn emit_tsc_freq() {
+    // CPUID.16H — EAX=base MHz, EBX=max MHz, ECX=bus MHz. Leaf is
+    // reported in the maximum-basic-leaf (EAX=0) as at least 0x16 on
+    // parts that support it. Check the maximum first.
+    let (max_leaf, _, _, _) = cpuid(0);
+    if max_leaf < 0x16 {
+        info!("ZAMAK_TSC_MHZ=unknown");
+        return;
+    }
+    let (base_mhz, _max_mhz, _bus_mhz, _) = cpuid(0x16);
+    if base_mhz == 0 {
+        info!("ZAMAK_TSC_MHZ=unknown");
+    } else {
+        info!("ZAMAK_TSC_MHZ={base_mhz}");
+    }
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+fn emit_tsc_freq() {}
+
+#[cfg(target_arch = "x86_64")]
+fn cpuid(leaf: u32) -> (u32, u32, u32, u32) {
+    let eax: u32;
+    let ebx: u32;
+    let ecx: u32;
+    let edx: u32;
+    // SAFETY:
+    //   Preconditions: `leaf` is a valid CPUID leaf number.
+    //   Postconditions: returns the four CPUID output registers.
+    //   Clobbers: EAX, EBX, ECX, EDX.
+    //   Worst-case: junk values for unsupported leaves; the caller
+    //     gates on `max_leaf` before trusting non-basic leaves.
+    // rbx is reserved by LLVM in x86-64 PIC; save/restore manually.
+    // ecx: sub-leaf (0 for leaves we use), clobbered on return.
+    // SAFETY: See function-level block.
+    unsafe {
+        core::arch::asm!(
+            "push rbx",
+            "cpuid",
+            "mov {ebx:e}, ebx",
+            "pop rbx",
+            inout("eax") leaf => eax,
+            ebx = out(reg) ebx,
+            inout("ecx") 0u32 => ecx,
+            out("edx") edx,
+            options(nostack, preserves_flags),
+        );
+    }
+    (eax, ebx, ecx, edx)
+}
+
 #[entry]
 fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     uefi_services::init(&mut system_table).unwrap();
+    emit_tsc_freq();
+    mark_phase("uefi_entry");
     info!("Zamak starting up ({})...", env!("CARGO_PKG_VERSION"));
 
     let mut boot_data: Option<KernelHandoff> = None;
@@ -563,6 +644,7 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                 let config_data = read_file(&mut file);
                 let config_str = core::str::from_utf8(&config_data).expect("Config is not UTF-8");
                 let config = config::parse(config_str);
+                mark_phase("config_parsed");
 
                 // Detect network-boot context.
                 use uefi::proto::network::snp::SimpleNetwork;
@@ -705,6 +787,7 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                             _ => {}
                         }
                     }
+                    mark_phase("menu_finished");
                 }
 
                 if let Some(entry) = config.entries.get(selected_idx) {
@@ -746,6 +829,7 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                             _ => panic!("Kernel is a directory"),
                         };
                         let kernel_data = read_file(&mut k_file);
+                        mark_phase("kernel_loaded");
 
                         // Dispatch on the entry's protocol. Linux uses its
                         // own boot flow (BootParams + RSI + 64-bit jump);
@@ -784,6 +868,7 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                                 &entry.cmdline,
                                 initrd_blob.as_deref(),
                             );
+                            mark_phase("requests_fulfilled");
                             boot_data = Some(handoff);
                             k_file.close();
                             file.close();
@@ -921,6 +1006,7 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                             smp_response,
                             &relocated_requests,
                         );
+                        mark_phase("requests_fulfilled");
 
                         // Build per-arch page tables. Dispatches to
                         // x86_64 / aarch64 / riscv64 / loongarch64 in
@@ -947,6 +1033,7 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                     "Exiting boot services and jumping to Limine kernel at {:#x}",
                     entry
                 );
+                mark_phase("pre_exit_boot_services");
                 let (_st, _mmap_iter) = system_table.exit_boot_services();
                 // SAFETY: ExitBootServices has succeeded; the caller built the
                 // page tables rooted at `root_phys` earlier and placed the
@@ -963,6 +1050,7 @@ fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
                     "Exiting boot services and jumping to Linux kernel at {:#x} (RSI={:#x})",
                     entry, boot_params_phys
                 );
+                mark_phase("pre_exit_boot_services");
                 let (_st, _mmap_iter) = system_table.exit_boot_services();
                 // SAFETY: ExitBootServices has succeeded; the caller built the
                 // BootParams zero page at `boot_params_phys` and populated E820

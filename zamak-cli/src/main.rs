@@ -122,6 +122,9 @@ fn run(argv: &[String]) -> Outcome {
         "describe" => run_data_cmd("describe", &policy, cmdline.clone(), || {
             commands::describe::run(&sub_args)
         }),
+        "bench" => run_data_cmd("bench", &policy, cmdline.clone(), || {
+            commands::bench::run(&sub_args)
+        }),
         "completions" => match commands::completions::run(&sub_args) {
             Ok(()) => Ok(0),
             Err(e) => Err((e, policy, cmdline)),
@@ -252,6 +255,7 @@ fn print_help() {
     println!("  schema [<cmd>]   Emit JSON Schema (Draft 2020-12)");
     println!("  describe         Emit capability manifest");
     println!("  completions <sh> Emit shell completion script (bash|zsh|fish|nushell)");
+    println!("  bench <sub>      Boot-phase benchmarking (parse-serial)");
     println!("  help             Show this message");
     println!();
     println!("Global flags:");

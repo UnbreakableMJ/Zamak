@@ -12,6 +12,25 @@ All dates use ISO 8601 format (YYYY-MM-DD).
 
 ## [Unreleased]
 
+### Added
+
+- **M6-3 part 1 — boot-phase TSC instrumentation**. `zamak-uefi`
+  now emits `ZAMAK_PHASE=<name> tsc=<u64>` lines on COM1 at six
+  checkpoints (`uefi_entry`, `config_parsed`, `menu_finished`,
+  `kernel_loaded`, `requests_fulfilled`, `pre_exit_boot_services`)
+  plus one `ZAMAK_TSC_MHZ=<n>` discovered via CPUID 0x16
+  (`unknown` when unavailable, as in QEMU). New
+  `zamak-cli bench parse-serial [--tsc-mhz <mhz>] [<path>]`
+  sub-command ingests a captured UEFI serial log and emits an
+  SFRS envelope whose `data.phases[]` carries `{phase, tsc,
+  delta_cycles[, delta_ns]}` per checkpoint. With this, the
+  bare-metal perf leg of M6-3 is a one-shot: capture
+  `-serial` on real hardware, feed through the parser, compare
+  against the same run on Limine. Part 2 (actual hardware run)
+  remains the user's responsibility. 7 new unit tests cover
+  format matrix (explicit vs log-reported `tsc_mhz`,
+  malformed/missing lines, empty input).
+
 ## [0.8.4] - 2026-04-24
 
 Banks M2-12. No other functional change since v0.8.3.

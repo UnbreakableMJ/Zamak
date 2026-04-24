@@ -108,6 +108,19 @@ pub const COMMANDS: &[CommandSpec] = &[
         exit_codes: EXIT_CODES_DEFAULT,
         examples: examples_completions,
     },
+    CommandSpec {
+        name: "bench",
+        description: "Boot-phase benchmarking helpers (M6-3 part 1 host side)",
+        destructive: false,
+        idempotent: true,
+        supports_dry_run: false,
+        supports_json: true,
+        supports_fields: true,
+        parameters: params_bench,
+        output: output_bench,
+        exit_codes: EXIT_CODES_DEFAULT,
+        examples: examples_bench,
+    },
 ];
 
 pub const EXIT_CODES_DEFAULT: &[ErrorCode] = &[
@@ -228,6 +241,30 @@ fn params_completions() -> Value {
     )])
 }
 
+fn params_bench() -> Value {
+    schema_object(&[
+        param_with_enum(
+            "subverb",
+            "string",
+            true,
+            "Sub-verb (only parse-serial today)",
+            &["parse-serial"],
+        ),
+        param(
+            "tsc_mhz",
+            "integer",
+            false,
+            "Override the TSC frequency in MHz (else taken from ZAMAK_TSC_MHZ= log line if present)",
+        ),
+        param(
+            "path",
+            "string",
+            false,
+            "Serial log to parse (stdin if omitted)",
+        ),
+    ])
+}
+
 // ---------- output ----------
 
 fn output_install() -> Value {
@@ -279,6 +316,14 @@ fn output_completions() -> Value {
     shape_simple("string", "Completion script text")
 }
 
+fn output_bench() -> Value {
+    shape_object(
+        "object",
+        "Parsed boot-phase timeline",
+        &[("tsc_mhz", "integer"), ("phases", "array")],
+    )
+}
+
 // ---------- examples ----------
 
 fn examples_install() -> Value {
@@ -323,6 +368,14 @@ fn examples_completions() -> Value {
     Value::Array(vec![
         Value::str("zamak completions bash > /etc/bash_completion.d/zamak"),
         Value::str("zamak completions nushell | save -f ~/.config/nushell/zamak.nu"),
+    ])
+}
+
+fn examples_bench() -> Value {
+    Value::Array(vec![
+        Value::str("zamak bench parse-serial /tmp/phase.log"),
+        Value::str("zamak bench parse-serial --tsc-mhz 2400 < uefi.log"),
+        Value::str("zamak bench parse-serial --json /tmp/phase.log | jq '.data.phases[].delta_ns'"),
     ])
 }
 
