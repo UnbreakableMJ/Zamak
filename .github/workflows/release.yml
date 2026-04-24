@@ -19,14 +19,22 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # `bin` is the exact filename cargo emits:
+          # `*-unknown-uefi` targets produce `.efi`; bare-metal
+          # (`-unknown-none*`) targets produce an ELF with no
+          # extension (just the bin-crate name `zamak-uefi`).
           - target: x86_64-unknown-uefi
             artifact: BOOTX64.EFI
+            bin: zamak-uefi.efi
           - target: aarch64-unknown-uefi
             artifact: BOOTAA64.EFI
+            bin: zamak-uefi.efi
           - target: riscv64gc-unknown-none-elf
             artifact: BOOTRISCV64.EFI
+            bin: zamak-uefi
           - target: loongarch64-unknown-none
             artifact: BOOTLOONGARCH64.EFI
+            bin: zamak-uefi
     # BOOTIA32.EFI (i686-unknown-uefi) is intentionally omitted:
     # zamak-uefi/src/paging.rs `compile_error!`s for
     # `target_arch = "x86"` because the IA-32 paging path was
@@ -46,7 +54,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: target/${{ matrix.target }}/release/*.efi
+          path: target/${{ matrix.target }}/release/${{ matrix.bin }}
+          if-no-files-found: error
 
   # `bios-stage3` (zamak-bios.sys BIOS stage-3 binary) is intentionally
   # not built here. `cargo build -p zamak-bios --release` for the host
@@ -74,6 +83,7 @@ jobs:
         with:
           name: ${{ matrix.name }}
           path: target/release/zamak
+          if-no-files-found: error
 
   # Optional FreeBSD CLI build. Runs through `vmactions/freebsd-vm`,
   # matches the FreeBSD leg of the CI test matrix so the host CLI
@@ -94,12 +104,16 @@ jobs:
           run: |
             . $HOME/.cargo/env
             cargo build -p zamak-cli --release
-            mkdir -p /tmp/zamak-freebsd
-            cp target/release/zamak /tmp/zamak-freebsd/
+      # `vmactions/freebsd-vm@v1` mounts the checkout into the VM
+      # and syncs the workspace back on exit, so the binary built at
+      # `target/release/zamak` ends up at the same relative path on
+      # the runner filesystem. `/tmp` inside the VM is NOT synced —
+      # the previous `cp /tmp/…` attempt silently dropped the artifact.
       - uses: actions/upload-artifact@v4
         with:
           name: zamak-freebsd-x86_64
-          path: /tmp/zamak-freebsd/zamak
+          path: target/release/zamak
+          if-no-files-found: error
 
   publish:
     runs-on: ubuntu-latest

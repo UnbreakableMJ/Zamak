@@ -12,6 +12,32 @@ All dates use ISO 8601 format (YYYY-MM-DD).
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-04-24
+
+Third release-workflow patch. v0.8.2 produced 6/9 expected assets
+on the GH Release page. Three artifacts (`BOOTRISCV64.EFI`,
+`BOOTLOONGARCH64.EFI`, `zamak-freebsd-x86_64`) failed to upload
+with silent `"No files were found"` warnings.
+
+### Fixed
+
+- **`build-artifacts` upload path** — was `*.efi`, but the two
+  bare-metal targets (`riscv64gc-unknown-none-elf`,
+  `loongarch64-unknown-none`) produce a plain ELF named
+  `zamak-uefi` (no `.efi` extension). Added an explicit `bin:`
+  matrix key per target — `zamak-uefi.efi` for the two UEFI
+  targets, `zamak-uefi` for bare-metal — and point the upload
+  at `target/<target>/release/<bin>` exactly.
+- **`cli-freebsd` upload path** — was `/tmp/zamak-freebsd/zamak`,
+  which is VM-internal and not synced back to the runner.
+  `vmactions/freebsd-vm@v1` DOES sync the `target/` directory
+  out (it lives inside the checkout), so upload directly from
+  `target/release/zamak` and drop the no-op `cp` into `/tmp`.
+- **All `upload-artifact@v4` steps** — added
+  `if-no-files-found: error`. Future path drifts will fail the
+  job instead of silently skipping the upload with a warning,
+  so we don't release ship short again without noticing.
+
 ## [0.8.2] - 2026-04-24
 
 Second release-workflow patch. v0.8.1 successfully published a GH
