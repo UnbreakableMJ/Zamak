@@ -12,6 +12,113 @@ All dates use ISO 8601 format (YYYY-MM-DD).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-04-24
+
+CI-infrastructure consolidation release. Since v0.7.0, the CI
+pipeline was ported from Forgejo to GitHub Actions with full
+parity; a six-hour-hang regression in the `zamak-test` QEMU
+harness was fixed (watchdog now owns the child via an mpsc
+channel) and exposed four distinct loader bugs in the UEFI
+x86-64 boot path, all fixed — `qemu-smoke` and
+`asm-verification` are green end-to-end for the first time. The
+BIOS boot chain is now fully scaffolded: `zamak-test/build-images.sh`
+assembles a real MBR + stage2 + FAT32-partition disk, and the
+remaining blocker (`call_bios_int` trampoline returning AH=0x01)
+is isolated to a single instruction and documented in M1-16.
+
+### Added
+
+- **GitHub Actions CI pipeline** — complete port of
+  `.forgejo/workflows/ci.yml` to `.github/workflows/ci.yml`. All
+  16 jobs (fmt, clippy, test × 3 host targets, freebsd, miri,
+  deny, cross × 4 bootloader targets, size-gate, qemu-smoke,
+  asm-verification, sbom) pass on the Ubuntu / macOS / FreeBSD
+  runners.
+- **`zamak-test` `--timeout <seconds>` flag** — replaces the
+  advisory-only `BOOT_TIMEOUT` constant that never fired. A
+  watchdog thread now owns the QEMU child process via an
+  `mpsc::channel`-based shutdown contract; `recv_timeout`
+  guarantees the kill fires on schedule regardless of whether
+  the guest emits serial output. Wired into CI with
+  `--timeout 60` on both qemu-smoke and asm-verification.
+- **`zamak-test` robust OVMF discovery** — harness probes
+  `OVMF_CODE.fd` / `OVMF_CODE_4M.fd` / `OVMF_CODE_4M.ms.fd`
+  under `$OVMF_DIR` and copies `OVMF_VARS.fd` to a writable
+  temp file, so the UEFI suites run unchanged on Ubuntu 22.04,
+  Ubuntu 24.04, and Nix.
+- **BIOS boot chain scaffolding (partial M1-16)** —
+  `zamak-test/build-images.sh` now assembles a real
+  BIOS-bootable disk (MBR stage1 at LBA 0 + `zamak-bios` stage2
+  at LBA 1 + FAT32 partition at LBA 4096 containing
+  `zamak.conf` + `kernel.elf`). `zamak-stage1` gained a missing
+  `build.rs` (without it rust-lld ignored `linker.ld` and
+  objcopy produced an empty binary), direct COM1 serial output
+  for progress tracing, an INT 13h extension presence check,
+  and a multi-chunk read loop so stage2 binaries > 64 KiB don't
+  exceed the real-mode segment boundary. `zamak-bios` gained
+  serial checkpoints through `kmain`, an MBR partition-table
+  scan, and feature-gated SMP modules (trampoline asm needs a
+  position-independent rewrite — tracked in M1-16). The chain
+  boots cleanly through `_start → protected-mode → kmain entry
+  → Disk::new → first BIOS-I/O call`, where it currently hangs
+  on `AH=0x01` from the `call_bios_int` round-trip; see
+  `TODO.md` M1-16 for the two proposed paths forward.
+
+### Fixed
+
+- **UEFI x86-64 boot smoke — four masked loader bugs** in
+  `zamak-uefi` that the watchdog hang had hidden:
+  - PML4 did not identity-map low physical memory, so the
+    instruction after `Cr3::write` in `handoff::jump_to_kernel`
+    page-faulted → triple fault.
+  - `KERNEL_PATH` lookup read from `entry.options` but the
+    config parser writes directly to `entry.kernel_path`.
+  - Kernel/module path separators weren't translated from
+    Limine-style `/` to UEFI's `\`.
+  - `zamak-core/src/assets/font.psf` was a 307-byte ASCII
+    placeholder, not a PSF1 binary — `PsfFont::parse` returned
+    `None` and the `.unwrap()` panicked before kernel load.
+    Replaced with a minimal valid PSF1 (4-byte header + 4096
+    bytes of blank glyphs).
+- **`cargo-deny` v0.15+ schema migration** — `deny.toml`
+  rewritten: dropped `vulnerability`/`yanked`/`notice`/`unlicensed`/`copyleft`
+  (removed per EmbarkStudios/cargo-deny#611), added
+  `GPL-3.0-or-later` to the allow list so the workspace crates
+  themselves stop being rejected, and added `license =
+  "GPL-3.0-or-later"` + `version = "0.7.0"` pins on every
+  `path` dep so path-only deps no longer count as wildcard
+  dependencies.
+- **Miri UB in `elf::apply_relocations` + `gfx::put_pixel`** —
+  unaligned u64/u32 writes through `*mut u8`-derived pointers
+  are UB under Miri's symbolic alignment check (hardware
+  tolerates them on x86/ARM); switched to `write_unaligned`.
+- **Clippy regressions after the GH Actions port** — clippy
+  scope narrowed to host-runnable crates (freestanding crates
+  pull `uefi-services`, whose `#[panic_handler]` collides with
+  Linux std's `panic_impl` → E0152). Multiple lint fixes across
+  `zamak-core` (doc-list overindent, collapsible-if,
+  manual-is-multiple-of, unnecessary-map-or), `zamak-cli` (10
+  lints from `derivable_impls` to `result_large_err`),
+  `wallpaper`/`proptests` (identity ops, inconsistent hex digit
+  grouping). Latent `bad_asm_style` errors (`.intel_syntax` /
+  `.att_syntax` directives are redundant on current nightly)
+  fixed in `zamak-stage1/src/mbr.rs` and
+  `zamak-bios/src/entry.rs`.
+- **`zamak-cli` global `--version` shadowed sbom's
+  `--version` arg** — sbom's flag renamed to `--release-version`;
+  the global parser now stops consuming `--version`/`--help`
+  after seeing a sub-command positional.
+
+### Changed
+
+- **Style sweep** — one-shot `cargo fmt --all` across the
+  workspace.
+- **TODO.md** — post-v0.7.0 flips for REL-1..7, M4-7, M6-2
+  (v0.7.0 tag published their artifacts); TEST-4 and TEST-5
+  flipped to `[✓]` for the UEFI x86-64 path; M1-16 note
+  updated with concrete next-step for the `call_bios_int`
+  trampoline.
+
 ## [0.7.0] - 2026-04-21
 
 First cut of the dual-mode host CLI (SFRS v1.0.0), multi-arch UEFI

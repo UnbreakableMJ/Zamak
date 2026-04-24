@@ -2,7 +2,7 @@
 
 [package]
 name = "zamak-stage1"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 description = "BIOS stage1 MBR boot sector — 512-byte pure global_asm! binary"
 license = "GPL-3.0-or-later"

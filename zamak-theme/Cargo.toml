@@ -2,7 +2,7 @@
 
 [package]
 name = "zamak-theme"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 description = "Theme file parser and color-token resolver for ZAMAK bootloader"
 license = "GPL-3.0-or-later"
