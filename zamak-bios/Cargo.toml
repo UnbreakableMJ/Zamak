@@ -2,7 +2,7 @@
 
 [package]
 name = "zamak-bios"
-version = "0.8.3"
+version = "0.8.4"
 edition = "2021"
 license = "GPL-3.0-or-later"
 
@@ -13,8 +13,8 @@ license = "GPL-3.0-or-later"
 smp = []
 
 [dependencies]
-zamak-core = { path = "../zamak-core", version = "0.8.3" }
-zamak-theme = { path = "../zamak-theme", version = "0.8.3" }
+zamak-core = { path = "../zamak-core", version = "0.8.4" }
+zamak-theme = { path = "../zamak-theme", version = "0.8.4" }
 log = "0.4"
 x86_64 = { version = "0.15", default-features = false, features = ["instructions"] }
 limine-protocol = "0.5"

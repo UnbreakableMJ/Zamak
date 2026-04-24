@@ -3,7 +3,7 @@
 
 [package]
 name = "zamak-linux-stub-kernel"
-version = "0.8.3"
+version = "0.8.4"
 edition = "2021"
 description = "Stub Linux-Boot-Protocol bzImage for zamak-test's linux-bzimage smoke suite (M2-12). Emits 'Linux version 0.0.0-zamak-stub' on COM1 and exits via QEMU isa-debug-exit."
 license = "GPL-3.0-or-later"

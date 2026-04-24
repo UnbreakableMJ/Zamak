@@ -12,6 +12,10 @@ All dates use ISO 8601 format (YYYY-MM-DD).
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-04-24
+
+Banks M2-12. No other functional change since v0.8.3.
+
 ### Added
 
 - **M2-12 done** — end-to-end Linux bzImage boot smoke under QEMU

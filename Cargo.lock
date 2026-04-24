@@ -1244,7 +1244,7 @@ dependencies = [
 
 [[package]]
 name = "zamak-bios"
-version = "0.8.3"
+version = "0.8.4"
 dependencies = [
  "goblin",
  "limine-protocol",
@@ -1256,7 +1256,7 @@ dependencies = [
 
 [[package]]
 name = "zamak-cli"
-version = "0.8.3"
+version = "0.8.4"
 dependencies = [
  "crossterm",
  "ratatui",
@@ -1264,7 +1264,7 @@ dependencies = [
 
 [[package]]
 name = "zamak-core"
-version = "0.8.3"
+version = "0.8.4"
 dependencies = [
  "goblin",
  "limine-protocol",
@@ -1276,14 +1276,14 @@ dependencies = [
 
 [[package]]
 name = "zamak-decompressor"
-version = "0.8.3"
+version = "0.8.4"
 dependencies = [
  "miniz_oxide",
 ]
 
 [[package]]
 name = "zamak-macros"
-version = "0.8.3"
+version = "0.8.4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1292,23 +1292,23 @@ dependencies = [
 
 [[package]]
 name = "zamak-proto"
-version = "0.8.3"
+version = "0.8.4"
 
 [[package]]
 name = "zamak-stage1"
-version = "0.8.3"
+version = "0.8.4"
 
 [[package]]
 name = "zamak-test"
-version = "0.8.3"
+version = "0.8.4"
 
 [[package]]
 name = "zamak-theme"
-version = "0.8.3"
+version = "0.8.4"
 
 [[package]]
 name = "zamak-uefi"
-version = "0.8.3"
+version = "0.8.4"
 dependencies = [
  "limine-protocol",
  "log",
