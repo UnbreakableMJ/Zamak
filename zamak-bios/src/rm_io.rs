@@ -295,6 +295,234 @@ global_asm!(
     //   AL  = 0x00 on success, BIOS AH code on failure.
     // Clobbers: AX, CX, DX, ESI, flags, DF, ES (restored).
     // =======================================================================
+    // =======================================================================
+    // rm_phaseb_orchestrate
+    //
+    // Run the entire real-mode I/O phase and populate the
+    // `BootDataBundle` at phys 0x1000.
+    //
+    // Called exactly once from `_start` while the CPU is in 16-bit
+    // real mode with DS/ES/SS = 0 and SP = 0x8000. On return the
+    // bundle is fully populated, `ZBDL_MAGIC` is stamped last, and
+    // the caller may proceed with the CR0.PE transition to
+    // protected mode.
+    //
+    // Scratch layout (phys):
+    //   0x00400..0x004FF   orchestration loop state (boot drive, E820
+    //                      continuation/DI/count, partition-load
+    //                      cursors)
+    //   0x00500..0x006FF   MBR sector scratch (1 sector = 512 B)
+    //   0x00700..0x0071F   INT 13h DAP + rm_load_chunk byte-count slot
+    //   0x01000..0x02D47   BootDataBundle
+    //   0x05000..0x06FFF   FAT32 bounce buffer (rm_load_chunk / rm_memcpy_to_high)
+    //
+    // In:  DL = BIOS boot drive (as handed to `_start` from Stage 1).
+    // Out: Bundle at 0x1000 populated. Magic stamped last.
+    //      On failure: emits '?' on COM1 and halts forever — Stage 2
+    //      can't return usefully without disk I/O.
+    // =======================================================================
+    ".global rm_phaseb_orchestrate",
+    "rm_phaseb_orchestrate:",
+    // Boot drive is already saved at [0x0401] by `_start` before its
+    // 'Z' breadcrumb's `mov dx, 0x3F8` clobbers DL.
+    "    cld",
+    // Zero the bundle region so fields we don't write stay 0 for kmain.
+    "    xor ax, ax",
+    "    mov ds, ax",
+    "    mov es, ax",
+    "    mov di, 0x1000",
+    "    mov cx, 0x1E00",                // 7680 bytes covers the bundle
+    "    xor al, al",
+    "    rep stosb",
+    // Enter unreal mode so FS has a flat cache (rm_memcpy_to_high
+    // does its own ES flip, but unreal_enter also exercises the GDT
+    // and gives us a known CR0 starting state).
+    ".byte 0xE8",
+    ".word rm_unreal_enter - . - 2",
+    "    mov al, 'U'",
+    ".byte 0xE8",
+    ".word rm_outb_com1 - . - 2",
+    "    mov al, [0x0401]",
+    "    mov byte ptr [0x1004], al",
+    // ---- E820 walk ----
+    "    mov al, 'E'",
+    ".byte 0xE8",
+    ".word rm_outb_com1 - . - 2",
+    "    mov dword ptr [0x0410], 0",
+    "    mov word ptr  [0x0414], 0x100C",
+    "    mov dword ptr [0x0418], 0",
+    ".Lpb_e820_loop:",
+    "    mov ebx, [0x0418]",
+    "    mov di, [0x0414]",
+    "    xor ax, ax",
+    "    mov es, ax",
+    ".byte 0xE8",
+    ".word rm_e820_next - . - 2",
+    "    cmp eax, 0x534D4150",
+    "    jne .Lpb_e820_done",
+    "    mov [0x0418], ebx",
+    "    add word ptr [0x0414], 24",
+    "    inc dword ptr [0x0410]",
+    "    test ebx, ebx",
+    "    jz .Lpb_e820_done",
+    "    cmp dword ptr [0x0410], 128",
+    "    jb .Lpb_e820_loop",
+    ".Lpb_e820_done:",
+    "    mov eax, [0x0410]",
+    "    mov dword ptr [0x1008], eax",
+    // ---- MBR read ----
+    ".Lpb_mbr_first:",
+    "    mov al, 'M'",
+    ".byte 0xE8",
+    ".word rm_outb_com1 - . - 2",
+    // Build DAP via .word stores (bypasses any subtle word-immediate
+    // encoding quirks GAS+LLVM might have for `mov word ptr [imm], imm`).
+    "    xor ax, ax",
+    "    mov ds, ax",
+    "    mov es, ax",
+    "    mov di, 0x0700",
+    "    mov ax, 0x0010",
+    "    stosw",                            // size + reserved
+    "    mov ax, 1",
+    "    stosw",                            // count
+    "    mov ax, 0x0500",
+    "    stosw",                            // offset = 0x0500
+    "    mov ax, 0",
+    "    stosw",                            // segment = 0 → phys 0x0500
+    "    xor ax, ax",
+    "    stosw",                            // LBA[0..1] = 0 (MBR)
+    "    stosw",                            // LBA[2..3]
+    "    stosw",                            // LBA[4..5]
+    "    stosw",                            // LBA[6..7]
+    "    mov dl, [0x0401]",
+    "    mov si, 0x0700",
+    "    mov ah, 0x42",
+    "    int 0x13",
+    "    mov al, ah",
+    "    jc  .Lpb_fail",
+    // ---- Scan MBR partition table at 0x06BE..0x06FD (4 × 16 bytes) ----
+    // (Sector loaded at phys 0x0500; partition table is at MBR offset
+    //  446 = 0x1BE; phys = 0x0500 + 0x1BE = 0x06BE.)
+    "    mov bx, 0x06BE",
+    "    mov cx, 4",
+    ".Lpb_part_scan:",
+    "    mov al, [bx + 4]",                // partition type byte
+    "    cmp al, 0x0B",
+    "    je .Lpb_part_found",
+    "    cmp al, 0x0C",
+    "    je .Lpb_part_found",
+    "    cmp al, 0x83",
+    "    je .Lpb_part_found",
+    "    add bx, 16",
+    "    loop .Lpb_part_scan",
+    "    jmp .Lpb_fail",                   // no FAT32/Linux partition
+    ".Lpb_part_found:",
+    "    mov eax, [bx + 8]",               // partition LBA (u32, offset 8 in entry)
+    "    mov dword ptr [0x1C0C], eax",     // bundle.partition_lba
+    "    mov al, [bx + 4]",
+    "    mov byte ptr [0x1C10], al",       // bundle.partition_type
+    // ---- Bulk-load partition into phys 0x0200_0000 (32 MiB), cap 8 MiB ----
+    "    mov al, 'L'",
+    ".byte 0xE8",
+    ".word rm_outb_com1 - . - 2",
+    // Loop state at 0x0420:
+    //   [0x0420] u32 remaining_sectors (8 MiB / 512 = 0x4000)
+    //   [0x0424] u32 current LBA
+    //   [0x0428] u32 dest_phys cursor
+    "    mov eax, [0x1C0C]",
+    "    mov [0x0424], eax",
+    "    mov dword ptr [0x0428], 0x02000000",
+    "    mov dword ptr [0x0420], 0x4000",
+    ".Lpb_load_loop:",
+    "    mov eax, [0x0420]",
+    "    test eax, eax",
+    "    jz .Lpb_load_done",
+    "    cmp eax, 16",
+    "    jbe .Lpb_have_chunk",
+    "    mov eax, 16",
+    ".Lpb_have_chunk:",
+    "    mov dl, [0x0401]",
+    "    mov ebx, [0x0424]",
+    "    mov edi, [0x0428]",
+    "    push eax",                        // stash chunk count across rm_load_chunk
+    ".byte 0xE8",
+    ".word rm_load_chunk - . - 2",
+    "    pop ebx",                         // chunk sectors (reuse ebx)
+    "    test al, al",
+    "    jnz .Lpb_fail",
+    "    mov ecx, ebx",
+    "    shl ecx, 9",                      // chunk bytes
+    "    add [0x0428], ecx",               // dest += bytes
+    "    add [0x0424], ebx",               // LBA += chunk
+    "    sub [0x0420], ebx",               // remaining -= chunk
+    "    jmp .Lpb_load_loop",
+    ".Lpb_load_done:",
+    "    mov al, 'l'",
+    ".byte 0xE8",
+    ".word rm_outb_com1 - . - 2",
+    "    mov dword ptr [0x1C14], 0x02000000",  // partition_image_phys low
+    "    mov dword ptr [0x1C18], 0",           // partition_image_phys high
+    "    mov dword ptr [0x1C1C], 0x00800000",  // partition_image_len low (8 MiB)
+    "    mov dword ptr [0x1C20], 0",           // partition_image_len high
+    // ---- RSDP scan 0xE0000..0xFFFF0 for \"RSD PTR \" ----
+    "    mov al, 'R'",
+    ".byte 0xE8",
+    ".word rm_outb_com1 - . - 2",
+    "    mov ebx, 0xE0000",
+    ".Lpb_rsdp_loop:",
+    "    cmp dword ptr [ebx + 0], 0x20445352",  // \"RSD \" LE
+    "    jne .Lpb_rsdp_next",
+    "    cmp dword ptr [ebx + 4], 0x20525450",  // \"PTR \" LE
+    "    jne .Lpb_rsdp_next",
+    "    mov dword ptr [0x2D28], ebx",          // bundle.rsdp_phys low
+    "    mov dword ptr [0x2D2C], 0",            // bundle.rsdp_phys high
+    "    jmp .Lpb_rsdp_done",
+    ".Lpb_rsdp_next:",
+    "    add ebx, 16",                           // RSDP is on 16-byte boundary
+    "    cmp ebx, 0xFFFF0",
+    "    jb .Lpb_rsdp_loop",
+    ".Lpb_rsdp_done:",
+    // ---- SMBIOS / VBE: skipped in MVP; bundle fields stay 0. ----
+    // ---- Stamp ZBDL_MAGIC last so kmain can detect partial init ----
+    "    mov dword ptr [0x1000], 0x4C44425A",   // ZBDL_MAGIC
+    "    mov al, 'k'",
+    ".byte 0xE8",
+    ".word rm_outb_com1 - . - 2",
+    "    .byte 0xC3",                            // 16-bit near ret
+    ".Lpb_fail:",
+    // Emit the AL we're panicking on as two hex digits so bring-up
+    // logs distinguish BIOS error code from parse-time 0xFF.
+    "    mov [0x0430], al",
+    "    mov al, '?'",
+    ".byte 0xE8",
+    ".word rm_outb_com1 - . - 2",
+    "    mov al, [0x0430]",
+    "    mov bl, al",
+    "    shr al, 4",
+    "    and al, 0x0F",
+    "    cmp al, 10",
+    "    jb .Lpb_fail_hi_dec",
+    "    add al, 'A' - 10",
+    "    jmp .Lpb_fail_hi_emit",
+    ".Lpb_fail_hi_dec:",
+    "    add al, '0'",
+    ".Lpb_fail_hi_emit:",
+    ".byte 0xE8",
+    ".word rm_outb_com1 - . - 2",
+    "    mov al, bl",
+    "    and al, 0x0F",
+    "    cmp al, 10",
+    "    jb .Lpb_fail_lo_dec",
+    "    add al, 'A' - 10",
+    "    jmp .Lpb_fail_lo_emit",
+    ".Lpb_fail_lo_dec:",
+    "    add al, '0'",
+    ".Lpb_fail_lo_emit:",
+    ".byte 0xE8",
+    ".word rm_outb_com1 - . - 2",
+    ".Lpb_halt:",
+    "    hlt",
+    "    jmp .Lpb_halt",
     ".global rm_load_chunk",
     "rm_load_chunk:",
     "    push bp",
@@ -314,13 +542,15 @@ global_asm!(
     "    mov dword ptr [0x0710], ecx",
     // Issue the disk read. SI = DAP offset, DL still holds the drive.
     "    mov si, 0x0700",
-    "    call rm_disk_read_ext",
+    ".byte 0xE8",
+    ".word rm_disk_read_ext - . - 2",
     "    test al, al",
     "    jnz .Lrlc_err",
     // Success: memcpy bounce → high dest.
     "    mov ecx, [0x0710]",
     "    mov esi, 0x5000",
-    "    call rm_memcpy_to_high",
+    ".byte 0xE8",
+    ".word rm_memcpy_to_high - . - 2",
     "    xor al, al",
     "    pop bp",
     "    .byte 0xC3",

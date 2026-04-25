@@ -50,12 +50,34 @@ global_asm!(
     "    mov es, ax",
     "    mov ss, ax",
     "    mov sp, 0x8000",
+    // Save the BIOS boot drive (DL) before the 'Z' breadcrumb's
+    // `mov dx, 0x3F8` clobbers it. The orchestration in
+    // `rm_phaseb_orchestrate` re-reads from this scratch location.
+    "    mov byte ptr [0x0401], dl",
     // Print 'Z' to COM1 so we know stage2 reached real-mode entry.
     "    mov dx, 0x3F8",
     "    mov al, 'Z'",
     "    out dx, al",
     "",
     "    lgdt [gdt_descriptor]",
+    "",
+    "    sti",                             // BIOS services need interrupts on
+    // M1-16 Path B: run the entire real-mode I/O phase and populate
+    // the BootDataBundle at phys 0x1000 before CR0.PE. On return,
+    // every BIOS-backed datum kmain needs (E820, MBR, partition
+    // image, RSDP) is in the bundle; protected-mode kmain never
+    // calls BIOS again.
+    //
+    // Use raw bytes for the call: LLVM's Intel-syntax `.code16`
+    // backend emits `call <symbol>` as a 32-bit `calll` (5 bytes,
+    // pushes a 4-byte EIP). The `.byte 0xE8 + .word rel16` form
+    // forces a 16-bit near call (3 bytes, pushes 2-byte IP) so it
+    // matches the 16-bit `ret` (`.byte 0xC3`) at the orchestration's
+    // tail. Without this, every call/ret pair leaks 2 stack bytes
+    // and SS:SP eventually corrupts the BIOS-handler frame.
+    ".byte 0xE8",
+    ".word rm_phaseb_orchestrate - . - 2",
+    "    cli",                             // back to IF=0 for the PE switch
     "",
     "    mov eax, cr0",
     "    or  eax, 1",
@@ -73,14 +95,17 @@ global_asm!(
     "    mov fs, ax",
     "    mov gs, ax",
     "    mov ss, ax",
+    "    mov esp, 0x8000",               // stable PM stack, above bundle
     // Print 'P' to COM1 so we know the 16→32 mode switch succeeded.
     "    mov dx, 0x3F8",
     "    mov al, 'P'",
     "    out dx, al",
     "",
     "    .extern kmain",
-    "    and edx, 0xFF",
-    "    push edx",
+    // Path B: hand kmain the physical address of the BootDataBundle
+    // at 0x1000 that `rm_phaseb_orchestrate` populated before the
+    // PE transition. kmain consumes nothing else from BIOS.
+    "    push 0x1000",
     "    call kmain",
     "",
     ".Lhalt:",
