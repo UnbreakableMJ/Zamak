@@ -235,20 +235,61 @@ fn mark(b: u8) {
     }
 }
 
-/// Path B stub kmain: the default build.
-///
-/// Called by `init_32` with a pushed u32 argument. In the final Phase 5
-/// wiring this will be the physical address of the `BootDataBundle` at
-/// 0x01000; until those phases land, the stub simply drops a breadcrumb
-/// on COM1 and halts so the scaffolding compiles and boots far enough
-/// to confirm the 16→32 mode switch still works.
+/// Path B kmain: consumes the `BootDataBundle` populated by the
+/// real-mode orchestration in `_start`. This Phase 6 framework
+/// validates the magic and converts the E820 map into the Limine
+/// shape; the FAT32-parse + ELF load + Limine fulfillment + long-mode
+/// entry land in a follow-up commit.
 #[cfg(not(feature = "legacy_trampoline"))]
 #[no_mangle]
-pub extern "C" fn kmain(_bundle_phys: u32) -> ! {
-    mark(b'K'); // Path B kmain reached — scaffold stub, halts.
+pub extern "C" fn kmain(bundle_phys: u32) -> ! {
+    use crate::boot_bundle::{BootDataBundle, ZBDL_MAGIC};
+    use zamak_core::protocol::{
+        MemmapEntry, MEMMAP_ACPI_NVS, MEMMAP_ACPI_RECLAIMABLE, MEMMAP_BAD_MEMORY,
+        MEMMAP_RESERVED, MEMMAP_USABLE,
+    };
+
+    // SAFETY: hard-disable interrupts. We have no IDT, so any IRQ
+    // (e.g. the PIT timer at vector 0x08) would triple-fault.
+    unsafe {
+        core::arch::asm!("cli", options(nomem, nostack, preserves_flags));
+    }
+
+    mark(b'K');
+
+    // SAFETY: real-mode orchestration writes the bundle at this fixed
+    // address before the PE transition and stamps the magic last.
+    let bundle: &'static BootDataBundle =
+        unsafe { &*(bundle_phys as *const BootDataBundle) };
+    let magic = bundle.magic;
+    assert!(
+        magic == ZBDL_MAGIC,
+        "kmain: BootDataBundle magic mismatch"
+    );
+    mark(b'B');
+
+    // ---- E820 → Limine memmap entries ----
+    let e820_count = bundle.e820_count as usize;
+    let mut mmap_entries: Vec<MemmapEntry> = Vec::with_capacity(e820_count);
+    for i in 0..e820_count {
+        let entry = bundle.e820[i];
+        let base = entry.base;
+        let len = entry.len;
+        let typ = entry.typ;
+        let limine_typ = match typ {
+            1 => MEMMAP_USABLE,
+            2 => MEMMAP_RESERVED,
+            3 => MEMMAP_ACPI_RECLAIMABLE,
+            4 => MEMMAP_ACPI_NVS,
+            5 => MEMMAP_BAD_MEMORY,
+            _ => MEMMAP_RESERVED,
+        };
+        mmap_entries.push(MemmapEntry { base, length: len, typ: limine_typ });
+    }
+    mark(b'E');
+    let _ = mmap_entries;
+    mark(b'.');
     loop {
-        // SAFETY: `hlt` on a halted CPU is always safe; loop prevents
-        // falling through if an NMI wakes the CPU.
         unsafe {
             core::arch::asm!("hlt", options(nomem, nostack, preserves_flags));
         }

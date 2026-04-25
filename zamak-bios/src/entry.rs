@@ -89,6 +89,11 @@ global_asm!(
     // =========================================================================
     ".code32",
     "init_32:",
+    // Hard-disable interrupts: in 32-bit PM with no IDT loaded, any
+    // hardware IRQ (PIT timer at vector 0x08) triple-faults via the
+    // missing-handler path. We only re-enable once the kernel sets
+    // up its own IDT.
+    "    cli",
     "    mov ax, 0x10",
     "    mov ds, ax",
     "    mov es, ax",
