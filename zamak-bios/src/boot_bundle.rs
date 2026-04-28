@@ -224,8 +224,7 @@ const _: () = {
     // real-mode orchestration writes them last so kmain sees a
     // fully-initialized bundle only if every step succeeded.
     assert!(
-        core::mem::offset_of!(BootDataBundle, kernel_len)
-            + core::mem::size_of::<u64>()
+        core::mem::offset_of!(BootDataBundle, kernel_len) + core::mem::size_of::<u64>()
             == core::mem::size_of::<BootDataBundle>()
     );
 };
@@ -278,8 +277,7 @@ const _: () = {
     assert!(bytes[2] == b'D', "ZBDL_MAGIC byte 2 must be 'D'");
     assert!(bytes[3] == b'L', "ZBDL_MAGIC byte 3 must be 'L'");
     assert!(
-        core::mem::size_of::<[E820Entry; E820_MAX_ENTRIES]>()
-            == 24 * E820_MAX_ENTRIES,
+        core::mem::size_of::<[E820Entry; E820_MAX_ENTRIES]>() == 24 * E820_MAX_ENTRIES,
         "E820 table must be exactly 24 bytes per entry (no tail padding)"
     );
     // Leave plenty of headroom below the 0x4000 mark where the FAT32

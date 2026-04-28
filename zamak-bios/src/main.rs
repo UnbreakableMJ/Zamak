@@ -321,11 +321,11 @@ fn mark(b: u8) {
 #[cfg(not(feature = "legacy_trampoline"))]
 #[no_mangle]
 pub extern "C" fn kmain(bundle_phys: u32) -> ! {
-    use alloc::string::String;
     use crate::boot_bundle::{BootDataBundle, ZBDL_MAGIC};
+    use alloc::string::String;
     use zamak_core::protocol::{
-        MemmapEntry, MEMMAP_ACPI_NVS, MEMMAP_ACPI_RECLAIMABLE, MEMMAP_BAD_MEMORY,
-        MEMMAP_RESERVED, MEMMAP_USABLE,
+        MemmapEntry, MEMMAP_ACPI_NVS, MEMMAP_ACPI_RECLAIMABLE, MEMMAP_BAD_MEMORY, MEMMAP_RESERVED,
+        MEMMAP_USABLE,
     };
     use zamak_core::ram_fat32::RamFat32;
 
@@ -339,13 +339,9 @@ pub extern "C" fn kmain(bundle_phys: u32) -> ! {
 
     // SAFETY: real-mode orchestration writes the bundle at this fixed
     // address before the PE transition and stamps the magic last.
-    let bundle: &'static BootDataBundle =
-        unsafe { &*(bundle_phys as *const BootDataBundle) };
+    let bundle: &'static BootDataBundle = unsafe { &*(bundle_phys as *const BootDataBundle) };
     let magic = bundle.magic;
-    assert!(
-        magic == ZBDL_MAGIC,
-        "kmain: BootDataBundle magic mismatch"
-    );
+    assert!(magic == ZBDL_MAGIC, "kmain: BootDataBundle magic mismatch");
     mark(b'B');
 
     let e820_count = bundle.e820_count as usize;
@@ -363,7 +359,11 @@ pub extern "C" fn kmain(bundle_phys: u32) -> ! {
             5 => MEMMAP_BAD_MEMORY,
             _ => MEMMAP_RESERVED,
         };
-        mmap_entries.push(MemmapEntry { base, length: len, typ: limine_typ });
+        mmap_entries.push(MemmapEntry {
+            base,
+            length: len,
+            typ: limine_typ,
+        });
     }
     mark(b'E');
 
@@ -373,15 +373,12 @@ pub extern "C" fn kmain(bundle_phys: u32) -> ! {
     // bytes into the high-memory region documented by the bundle. The
     // address is flat-physical and the slice is read-only for the
     // duration of kmain.
-    let image: &'static [u8] = unsafe {
-        core::slice::from_raw_parts(part_phys as usize as *const u8, part_len as usize)
-    };
+    let image: &'static [u8] =
+        unsafe { core::slice::from_raw_parts(part_phys as usize as *const u8, part_len as usize) };
     let fs = RamFat32::parse(image).expect("FAT32 parse failed");
     mark(b'F');
 
-    let cfg_facts = fs
-        .find_path("zamak.conf")
-        .expect("zamak.conf missing");
+    let cfg_facts = fs.find_path("zamak.conf").expect("zamak.conf missing");
     let mut cfg_buf = vec![0u8; cfg_facts.len as usize];
     let cfg_n = fs.read_file(&cfg_facts, &mut cfg_buf);
     let config_str = core::str::from_utf8(&cfg_buf[..cfg_n]).unwrap_or("");
@@ -417,10 +414,7 @@ pub extern "C" fn kmain(bundle_phys: u32) -> ! {
     const KERNEL_LOAD_PHYS: u64 = 0x0060_0000;
     for seg in &info.segments {
         let dest_phys = KERNEL_LOAD_PHYS + seg.vaddr;
-        let src_end = seg
-            .offset
-            .checked_add(seg.file_size)
-            .expect("seg overflow");
+        let src_end = seg.offset.checked_add(seg.file_size).expect("seg overflow");
         assert!(src_end <= kernel_buf.len(), "seg out of ELF bounds");
         // SAFETY: dest_phys lies inside the dedicated kernel window
         // (above the bump heap, below the partition image); src is
@@ -465,8 +459,7 @@ pub extern "C" fn kmain(bundle_phys: u32) -> ! {
         let seg_ptr = seg.paddr as *const u8;
         // SAFETY: parse_elf populated seg.paddr / seg.mem_size with
         // the loaded segment's protected-mode-visible footprint.
-        let seg_slice =
-            unsafe { core::slice::from_raw_parts(seg_ptr, seg.mem_size as usize) };
+        let seg_slice = unsafe { core::slice::from_raw_parts(seg_ptr, seg.mem_size as usize) };
         let mut reqs = protocol::scan_requests(seg_slice);
         all_requests.append(&mut reqs);
     }

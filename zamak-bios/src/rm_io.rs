@@ -100,9 +100,9 @@ global_asm!(
     "rm_disk_read_ext:",
     "    mov ah, 0x42",
     "    int 0x13",
-    "    mov al, ah",           // move status into AL for caller
+    "    mov al, ah", // move status into AL for caller
     "    xor ah, ah",
-    "    .byte 0xC3",  // 16-bit near ret — see module header
+    "    .byte 0xC3", // 16-bit near ret — see module header
     // =======================================================================
     // rm_e820_next
     //
@@ -123,10 +123,10 @@ global_asm!(
     ".global rm_e820_next",
     "rm_e820_next:",
     "    mov eax, 0xE820",
-    "    mov edx, 0x534D4150",  // 'SMAP'
+    "    mov edx, 0x534D4150", // 'SMAP'
     "    mov ecx, 24",
     "    int 0x15",
-    "    .byte 0xC3",  // 16-bit near ret — see module header
+    "    .byte 0xC3", // 16-bit near ret — see module header
     // =======================================================================
     // rm_vbe_info
     //
@@ -145,7 +145,7 @@ global_asm!(
     "rm_vbe_info:",
     "    mov ax, 0x4F00",
     "    int 0x10",
-    "    .byte 0xC3",  // 16-bit near ret — see module header
+    "    .byte 0xC3", // 16-bit near ret — see module header
     // =======================================================================
     // rm_vbe_mode_info
     //
@@ -162,7 +162,7 @@ global_asm!(
     "rm_vbe_mode_info:",
     "    mov ax, 0x4F01",
     "    int 0x10",
-    "    .byte 0xC3",  // 16-bit near ret — see module header
+    "    .byte 0xC3", // 16-bit near ret — see module header
     // =======================================================================
     // rm_vbe_set_mode
     //
@@ -180,7 +180,7 @@ global_asm!(
     "rm_vbe_set_mode:",
     "    mov ax, 0x4F02",
     "    int 0x10",
-    "    .byte 0xC3",  // 16-bit near ret — see module header
+    "    .byte 0xC3", // 16-bit near ret — see module header
     // =======================================================================
     // rm_outb_com1
     //
@@ -198,7 +198,7 @@ global_asm!(
     "rm_outb_com1:",
     "    mov dx, 0x3F8",
     "    out dx, al",
-    "    .byte 0xC3",  // 16-bit near ret — see module header
+    "    .byte 0xC3", // 16-bit near ret — see module header
     // =======================================================================
     // rm_unreal_enter
     //
@@ -223,11 +223,11 @@ global_asm!(
     "    lgdt [gdt_descriptor]",
     "    mov eax, cr0",
     "    or  eax, 1",
-    "    mov cr0, eax",          // PE on
+    "    mov cr0, eax", // PE on
     "    mov bx, 0x10",
-    "    mov fs, bx",             // FS cache ← flat 32-bit data descriptor
+    "    mov fs, bx", // FS cache ← flat 32-bit data descriptor
     "    and eax, 0xFFFFFFFE",
-    "    mov cr0, eax",           // PE off (FS cache persists)
+    "    mov cr0, eax", // PE off (FS cache persists)
     "    sti",
     "    .byte 0xC3",
     // =======================================================================
@@ -259,18 +259,18 @@ global_asm!(
     "    cli",
     "    mov eax, cr0",
     "    or  eax, 1",
-    "    mov cr0, eax",          // PE on — required to populate ES cache
+    "    mov cr0, eax", // PE on — required to populate ES cache
     "    mov bx, 0x10",
-    "    mov es, bx",             // ES cache ← flat 32-bit data
+    "    mov es, bx", // ES cache ← flat 32-bit data
     "    and eax, 0xFFFFFFFE",
-    "    mov cr0, eax",           // PE off (ES cache persists)
+    "    mov cr0, eax", // PE off (ES cache persists)
     "    cld",
     // `addr32 rep movsb` = 0x67 0xF3 0xA4. Forces 32-bit address size
     // so the CPU uses ESI / EDI / ECX instead of SI / DI / CX. GAS's
     // Intel-syntax `addr32` prefix may not parse here, so emit raw.
     "    .byte 0x67, 0xF3, 0xA4",
-    "    pop es",                 // restore caller's real-mode ES value +
-                                   // 64-KiB limit cache (via real-mode seg load)
+    "    pop es", // restore caller's real-mode ES value +
+    // 64-KiB limit cache (via real-mode seg load)
     "    sti",
     "    .byte 0xC3",
     // =======================================================================
@@ -331,7 +331,7 @@ global_asm!(
     "    mov ds, ax",
     "    mov es, ax",
     "    mov di, 0x1000",
-    "    mov cx, 0x1E00",                // 7680 bytes covers the bundle
+    "    mov cx, 0x1E00", // 7680 bytes covers the bundle
     "    xor al, al",
     "    rep stosb",
     // Enter unreal mode so FS has a flat cache (rm_memcpy_to_high
@@ -382,18 +382,18 @@ global_asm!(
     "    mov es, ax",
     "    mov di, 0x0700",
     "    mov ax, 0x0010",
-    "    stosw",                            // size + reserved
+    "    stosw", // size + reserved
     "    mov ax, 1",
-    "    stosw",                            // count
+    "    stosw", // count
     "    mov ax, 0x0500",
-    "    stosw",                            // offset = 0x0500
+    "    stosw", // offset = 0x0500
     "    mov ax, 0",
-    "    stosw",                            // segment = 0 → phys 0x0500
+    "    stosw", // segment = 0 → phys 0x0500
     "    xor ax, ax",
-    "    stosw",                            // LBA[0..1] = 0 (MBR)
-    "    stosw",                            // LBA[2..3]
-    "    stosw",                            // LBA[4..5]
-    "    stosw",                            // LBA[6..7]
+    "    stosw", // LBA[0..1] = 0 (MBR)
+    "    stosw", // LBA[2..3]
+    "    stosw", // LBA[4..5]
+    "    stosw", // LBA[6..7]
     "    mov dl, [0x0401]",
     "    mov si, 0x0700",
     "    mov ah, 0x42",
@@ -406,7 +406,7 @@ global_asm!(
     "    mov bx, 0x06BE",
     "    mov cx, 4",
     ".Lpb_part_scan:",
-    "    mov al, [bx + 4]",                // partition type byte
+    "    mov al, [bx + 4]", // partition type byte
     "    cmp al, 0x0B",
     "    je .Lpb_part_found",
     "    cmp al, 0x0C",
@@ -415,12 +415,12 @@ global_asm!(
     "    je .Lpb_part_found",
     "    add bx, 16",
     "    loop .Lpb_part_scan",
-    "    jmp .Lpb_fail",                   // no FAT32/Linux partition
+    "    jmp .Lpb_fail", // no FAT32/Linux partition
     ".Lpb_part_found:",
-    "    mov eax, [bx + 8]",               // partition LBA (u32, offset 8 in entry)
-    "    mov dword ptr [0x1C0C], eax",     // bundle.partition_lba
+    "    mov eax, [bx + 8]", // partition LBA (u32, offset 8 in entry)
+    "    mov dword ptr [0x1C0C], eax", // bundle.partition_lba
     "    mov al, [bx + 4]",
-    "    mov byte ptr [0x1C10], al",       // bundle.partition_type
+    "    mov byte ptr [0x1C10], al", // bundle.partition_type
     // ---- Bulk-load partition into phys 0x0200_0000 (32 MiB), cap 8 MiB ----
     "    mov al, 'L'",
     ".byte 0xE8",
@@ -444,51 +444,51 @@ global_asm!(
     "    mov dl, [0x0401]",
     "    mov ebx, [0x0424]",
     "    mov edi, [0x0428]",
-    "    push eax",                        // stash chunk count across rm_load_chunk
+    "    push eax", // stash chunk count across rm_load_chunk
     ".byte 0xE8",
     ".word rm_load_chunk - . - 2",
-    "    pop ebx",                         // chunk sectors (reuse ebx)
+    "    pop ebx", // chunk sectors (reuse ebx)
     "    test al, al",
     "    jnz .Lpb_fail",
     "    mov ecx, ebx",
-    "    shl ecx, 9",                      // chunk bytes
-    "    add [0x0428], ecx",               // dest += bytes
-    "    add [0x0424], ebx",               // LBA += chunk
-    "    sub [0x0420], ebx",               // remaining -= chunk
+    "    shl ecx, 9",        // chunk bytes
+    "    add [0x0428], ecx", // dest += bytes
+    "    add [0x0424], ebx", // LBA += chunk
+    "    sub [0x0420], ebx", // remaining -= chunk
     "    jmp .Lpb_load_loop",
     ".Lpb_load_done:",
     "    mov al, 'l'",
     ".byte 0xE8",
     ".word rm_outb_com1 - . - 2",
-    "    mov dword ptr [0x1C14], 0x02000000",  // partition_image_phys low
-    "    mov dword ptr [0x1C18], 0",           // partition_image_phys high
-    "    mov dword ptr [0x1C1C], 0x00800000",  // partition_image_len low (8 MiB)
-    "    mov dword ptr [0x1C20], 0",           // partition_image_len high
+    "    mov dword ptr [0x1C14], 0x02000000", // partition_image_phys low
+    "    mov dword ptr [0x1C18], 0",          // partition_image_phys high
+    "    mov dword ptr [0x1C1C], 0x00800000", // partition_image_len low (8 MiB)
+    "    mov dword ptr [0x1C20], 0",          // partition_image_len high
     // ---- RSDP scan 0xE0000..0xFFFF0 for \"RSD PTR \" ----
     "    mov al, 'R'",
     ".byte 0xE8",
     ".word rm_outb_com1 - . - 2",
     "    mov ebx, 0xE0000",
     ".Lpb_rsdp_loop:",
-    "    cmp dword ptr [ebx + 0], 0x20445352",  // \"RSD \" LE
+    "    cmp dword ptr [ebx + 0], 0x20445352", // \"RSD \" LE
     "    jne .Lpb_rsdp_next",
-    "    cmp dword ptr [ebx + 4], 0x20525450",  // \"PTR \" LE
+    "    cmp dword ptr [ebx + 4], 0x20525450", // \"PTR \" LE
     "    jne .Lpb_rsdp_next",
-    "    mov dword ptr [0x2D28], ebx",          // bundle.rsdp_phys low
-    "    mov dword ptr [0x2D2C], 0",            // bundle.rsdp_phys high
+    "    mov dword ptr [0x2D28], ebx", // bundle.rsdp_phys low
+    "    mov dword ptr [0x2D2C], 0",   // bundle.rsdp_phys high
     "    jmp .Lpb_rsdp_done",
     ".Lpb_rsdp_next:",
-    "    add ebx, 16",                           // RSDP is on 16-byte boundary
+    "    add ebx, 16", // RSDP is on 16-byte boundary
     "    cmp ebx, 0xFFFF0",
     "    jb .Lpb_rsdp_loop",
     ".Lpb_rsdp_done:",
     // ---- SMBIOS / VBE: skipped in MVP; bundle fields stay 0. ----
     // ---- Stamp ZBDL_MAGIC last so kmain can detect partial init ----
-    "    mov dword ptr [0x1000], 0x4C44425A",   // ZBDL_MAGIC
+    "    mov dword ptr [0x1000], 0x4C44425A", // ZBDL_MAGIC
     "    mov al, 'k'",
     ".byte 0xE8",
     ".word rm_outb_com1 - . - 2",
-    "    .byte 0xC3",                            // 16-bit near ret
+    "    .byte 0xC3", // 16-bit near ret
     ".Lpb_fail:",
     // Emit the AL we're panicking on as two hex digits so bring-up
     // logs distinguish BIOS error code from parse-time 0xFF.
@@ -529,12 +529,12 @@ global_asm!(
     "    mov bp, sp",
     // Stash inputs at DAP / near-scratch so the BIOS call clobbering
     // general registers doesn't lose them.
-    "    mov word ptr [0x0700], 0x0010",       // DAP size + reserved
-    "    mov word ptr [0x0702], ax",           // count
-    "    mov word ptr [0x0704], 0x5000",       // buffer offset (bounce)
-    "    mov word ptr [0x0706], 0x0000",       // buffer segment
-    "    mov dword ptr [0x0708], ebx",         // LBA low32
-    "    mov dword ptr [0x070C], 0",           // LBA high32
+    "    mov word ptr [0x0700], 0x0010", // DAP size + reserved
+    "    mov word ptr [0x0702], ax",     // count
+    "    mov word ptr [0x0704], 0x5000", // buffer offset (bounce)
+    "    mov word ptr [0x0706], 0x0000", // buffer segment
+    "    mov dword ptr [0x0708], ebx",   // LBA low32
+    "    mov dword ptr [0x070C], 0",     // LBA high32
     // Save the chunk byte count (AX × 512) in the scratch dword at
     // 0x0710 so we can recover it after the BIOS call blows away AX.
     "    movzx ecx, ax",
