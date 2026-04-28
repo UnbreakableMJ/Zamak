@@ -12,7 +12,7 @@
 
 use alloc::alloc::{alloc, Layout};
 use x86_64::PhysAddr;
-use zamak_core::protocol::MemmapEntry;
+use zamak_core::protocol::{MemmapEntry, MEMMAP_USABLE};
 
 /// Page table entry flags: Present + Writable.
 const PTE_PRESENT_WRITABLE: u64 = 0x3;
@@ -38,12 +38,36 @@ const HHDM_VIRT_BASE: u64 = 0xFFFF_8000_0000_0000;
 /// PML4 index for the HHDM base address (bits 47:39).
 const HHDM_PML4_START: isize = ((HHDM_VIRT_BASE >> 39) & 0x1FF) as isize; // 256
 
-/// Computes the highest physical address from the memory map.
+/// Hard ceiling for the HHDM mapping. QEMU reports a high reserved
+/// MMIO region around 1 TiB which would force allocating ~1024
+/// PD-level pages — exhausting our 4 MiB bump heap. The HHDM only
+/// needs to reach RAM, not MMIO; capping at 16 GiB keeps the page
+/// table footprint under 80 KiB while comfortably covering every
+/// realistic boot-smoke configuration.
+const HHDM_MAX_BYTES: u64 = 16 * GIB;
+
+/// Computes the highest *usable* physical address from the memory
+/// map. Reserved / ACPI / MMIO entries are ignored so a high MMIO
+/// hole doesn't blow up the HHDM page-table allocation. The result is
+/// clamped to [`HHDM_MAX_BYTES`] for the same reason.
 fn max_physical_address(mmap: &[MemmapEntry]) -> u64 {
-    mmap.iter()
-        .map(|e| e.base.wrapping_add(e.length))
-        .max()
-        .unwrap_or(GIB)
+    let mut max: u64 = 0;
+    for e in mmap {
+        if e.typ != MEMMAP_USABLE {
+            continue;
+        }
+        let end = e.base.wrapping_add(e.length);
+        if end > max {
+            max = end;
+        }
+    }
+    if max == 0 {
+        return GIB;
+    }
+    if max > HHDM_MAX_BYTES {
+        return HHDM_MAX_BYTES;
+    }
+    max
 }
 
 /// Sets up 4-level page tables for the transition to long mode.
