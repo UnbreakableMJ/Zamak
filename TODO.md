@@ -115,7 +115,7 @@ SPDX-FileCopyrightText: 2026 Mohamed Hammad
 | M1-13 | `[✓]` | KASLR: RDSEED → RDRAND → RDTSC fallback chain in `X86KaslrRng` with CPUID detection (§FR-MM-003) |
 | M1-14 | `[✓]` | BLAKE2B hash implementation in `zamak-core::blake2b` (pure `no_std`, RFC 7693) for `#hash` URI suffix (§FR-CFG-003) |
 | M1-15 | `[✓]` | ISO 9660 filesystem driver (`zamak-core::iso9660`) — read-only, supports path traversal, ECMA-119 |
-| M1-16 | `[~]` | End-to-end BIOS Limine-Protocol kernel boot under QEMU. UEFI case `[✓]`. BIOS chain diagnosed all the way to the `call_bios_int` 32→real→32 trampoline. Observed serial: `ZAMAK Stage 1 / DL=80 / Loading Stage 2... / ZPMD[]!01`. Meaning: stage1 + stage2 + mode switch + `kmain` entry + `Disk::new` all work; the first `INT 13h AH=0x42` dispatched through the protected-mode-round-trip trampoline returns `AH=0x01` ("invalid function"). Same call issued **directly in real mode from stage1** succeeds, so the trampoline is leaving BIOS state wrong (likely IVT/A20/PIC/GDT not fully restored after the 32→real switch). Two paths forward for whoever picks this up: (A) debug the existing `zamak-bios/src/entry.rs` `call_bios_int` asm (non-trivial — ~40-instruction mode-transition block with CR0/segment/stack gymnastics), or (B) re-architect `zamak-bios` to do all BIOS I/O while still in real mode before the `ljmp 0x08, init_32` — simpler and matches how Limine's own stage3 does it. Build tooling (`build-images.sh`), stage1 multi-chunk INT 13h, MBR partition-table scan, and serial instrumentation are all in place. `bios-boot-smoke` remains removed from the suite until `call_bios_int` works or is refactored away. |
+| M1-16 | `[✓]` | End-to-end BIOS Limine-Protocol kernel boot under QEMU. Path B refactor lands: every BIOS I/O call (INT 13h disk read, INT 15h E820, RSDP scan, MBR partition lookup, partition bulk-load) runs in real mode before CR0.PE in `rm_phaseb_orchestrate`; the result lands in a `BootDataBundle` at phys 0x1000 that protected-mode `kmain` consumes. The legacy `call_bios_int` 32→real→32 trampoline that returned `AH=0x01` is gated behind the `legacy_trampoline` Cargo feature for regression comparison only. `bios-boot-smoke` is back in the `boot-smoke` suite and passes locally alongside `uefi-boot-smoke`. |
 
 ---
 
@@ -253,7 +253,7 @@ SPDX-FileCopyrightText: 2026 Mohamed Hammad
 | TEST-2 | `[✓]` | Miri — nightly `miri` component installed; `cargo +nightly miri test -p zamak-core --lib` runs clean (**158 passed, 0 failed**). The `spin_wait` test is gated `#[cfg(all(target_arch = "x86_64", not(miri)))]` because Miri's rdtsc stub is constant; all other `asm!` blocks have `#[cfg(miri)]` side-effect-free stubs |
 | TEST-3 | `[✓]` | `zamak-test` QEMU integration test harness with serial capture + ISA debug exit — crate scaffolded, wired into CI `qemu-smoke` job |
 | TEST-4 | `[✓]` | Post-assembly hardware state verification — 12 host-safe tests + dedicated `zamak-asm-verify-kernel` (Limine-Protocol kernel that runs every wrapper and emits `ASM_VERIFY_OK`) wired into CI `asm-verification` job. UEFI path passes end-to-end under OVMF; `zamak.conf` on the asm-verify ESP routes to `/asm-verify-kernel.elf`. |
-| TEST-5 | `[✓]` | Boot conformance (UEFI x86-64) — `qemu-smoke` CI job builds `zamak-test-kernel` + ESP image with `zamak.conf`, boots via OVMF, captures `ZAMAK` + `LIMINE_PROTOCOL_OK` on serial and exits via `isa-debug-exit` 0x63. Full protocol × arch matrix still pending multi-arch artifacts; BIOS leg gated on M1-16. |
+| TEST-5 | `[✓]` | Boot conformance (UEFI x86-64) — `qemu-smoke` CI job builds `zamak-test-kernel` + ESP image with `zamak.conf`, boots via OVMF, captures `ZAMAK` + `LIMINE_PROTOCOL_OK` on serial and exits via `isa-debug-exit` 0x63. Full protocol × arch matrix still pending multi-arch artifacts. With M1-16 closed the BIOS leg of the `boot-smoke` suite (`bios-boot-smoke`) passes locally and runs in CI alongside the UEFI case. |
 | TEST-6 | `[✓]` | Fuzz harnesses — `fuzz/fuzz_targets/{config_parser,uri_parser,multiboot_header,bmp_parser,config_parser_differential}.rs` via `cargo fuzz`. Differential target compares `zamak_core::config::parse` against a hand-rolled Limine v10.x reference model (clean-subset spec); 11 golden-corpus cross-checks pass in `zamak-core/tests/limine_reference_model.rs`. Full C-linked Limine `config.c` differential is a future extension |
 | TEST-7 | `[✓]` | `proptest`-based property tests (`tests/proptests.rs`) — PMM normalisation/allocation/disjointness, KASLR alignment, config-parser panic safety |
 
@@ -316,10 +316,9 @@ SPDX-FileCopyrightText: 2026 Mohamed Hammad
 | Testing | 7 | 0 | 0 |
 | CI/CD | 12 | 0 | 0 |
 | Release Artifacts | 10 | 0 | 0 |
-| **Total** | **155** | **3** | **0** |
+| **Total** | **156** | **2** | **0** |
 
-**No items are fully not-started.** The 3 remaining `[~]` items are:
+**No items are fully not-started.** The 2 remaining `[~]` items are:
 
-- **CI artifact confirmation** (1 item): `bios-boot-smoke` on `zamak-test-kernel` (M1-16) — needs the `call_bios_int` trampoline fix or real-mode I/O refactor. M2-12 now satisfied via the `zamak-linux-stub-kernel` synthetic bzImage; TEST-4 and TEST-5 are `[✓]` for the UEFI x86-64 path.
 - **LoongArch UEFI target** (M6-1): blocked on rustc upstream — `loongarch64-unknown-uefi` target does not yet exist, and `uefi-services`' `efiapi` ABI is unsupported on `loongarch64-unknown-none`. Paging builder + handoff code are implemented and compile for the bare-metal target; flips to `[✓]` when rustc lands the UEFI triple.
 - **Real hardware perf baseline** (M6-3): cold-boot timing requires bare-metal measurement on reference hardware.

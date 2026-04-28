@@ -8,6 +8,7 @@
 
 // Rust guideline compliant 2026-03-30
 
+use crate::boot_bundle::E820Entry;
 use crate::{call_bios_int, BiosRegs};
 use alloc::vec::Vec;
 use zamak_core::protocol::{
@@ -75,24 +76,6 @@ pub fn get_memory_map() -> Vec<MemmapEntry> {
 
     map
 }
-
-/// Raw E820 memory map entry as returned by BIOS INT 15h.
-#[repr(C, packed)]
-struct E820Entry {
-    base: u64,
-    len: u64,
-    typ: u32,
-    acpi: u32,
-}
-
-// §3.9.7: Compile-time layout verification for E820 entry.
-const _: () = {
-    assert!(
-        core::mem::size_of::<E820Entry>() == 24,
-        "E820Entry must be 24 bytes"
-    );
-    assert!(core::mem::offset_of!(E820Entry, base) == 0);
-    assert!(core::mem::offset_of!(E820Entry, len) == 8);
-    assert!(core::mem::offset_of!(E820Entry, typ) == 16);
-    assert!(core::mem::offset_of!(E820Entry, acpi) == 20);
-};
+// E820Entry moved to `boot_bundle::E820Entry` so both the legacy
+// protected-mode path and the Path B real-mode orchestration share
+// the same BIOS-layout record.

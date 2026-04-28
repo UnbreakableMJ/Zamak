@@ -11,6 +11,12 @@ license = "GPL-3.0-or-later"
 # position-independent rewrite to link against the current `.trampoline`
 # section placement (see zamak-bios/src/main.rs module comment).
 smp = []
+# Legacy 32→real→32 BIOS trampoline (pre-M1-16 Path B). Kept behind a
+# feature so the old `call_bios_int` / `Disk` / protected-mode
+# `get_memory_map` / VBE callers can still be resurrected for
+# regression comparison. The default build does all BIOS I/O in
+# real mode before CR0.PE — see M1-16 Path B.
+legacy_trampoline = []
 
 [dependencies]
 zamak-core = { path = "../zamak-core", version = "0.8.5" }

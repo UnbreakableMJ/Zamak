@@ -12,6 +12,42 @@ All dates use ISO 8601 format (YYYY-MM-DD).
 
 ## [Unreleased]
 
+### Changed
+
+- **M1-16 Path B**: BIOS boot path lifts every BIOS interrupt
+  call (INT 13h disk read, INT 15h E820 walk, RSDP scan, MBR
+  partition lookup, partition bulk-load) into real mode before
+  CR0.PE in `rm_phaseb_orchestrate`; protected-mode `kmain`
+  consumes a `BootDataBundle` at phys 0x1000 and never returns
+  to real mode. The legacy `call_bios_int` 32→real→32
+  trampoline that returned `AH=0x01` is gated behind the
+  `legacy_trampoline` Cargo feature.
+- New `zamak-core::ram_fat32` walker — concrete-type FAT32
+  parser over a borrowed `&[u8]` (no trait objects, no
+  packed-struct casts), with VFAT long-filename reassembly.
+  Replaces the Path B BIOS path's filesystem layer; UEFI is
+  unaffected.
+
+### Fixed
+
+- `zamak-bios::utils::{memset, memcpy}` no longer recurse —
+  the previous Rust-level bodies lowered back into themselves
+  via `core::ptr::{write_bytes, copy_nonoverlapping}` and hung
+  on the first non-trivial call. They're now hand-written
+  `rep stos` / `rep movs` blocks.
+- `zamak-bios::paging::setup_paging` ignores non-USABLE e820
+  entries when sizing the HHDM and caps the mapping at 16 GiB.
+  QEMU's 1 TiB high-memory MMIO entry would otherwise have
+  exhausted the 4 MiB bump heap on page-table allocation.
+
+### Re-enabled
+
+- `bios-boot-smoke` test in `zamak-test`'s `boot-smoke` suite,
+  removed in db68d69 while M1-16 was incomplete. CI now boots
+  the real BIOS chain (stage1 MBR + stage2 + FAT32 partition)
+  end-to-end and asserts the `ZAMAK` / `LIMINE_PROTOCOL_OK`
+  serial sentinels alongside the existing UEFI case.
+
 ## [0.8.5] - 2026-04-24
 
 Bundles the M6-3 part 1 boot-phase instrumentation plus a

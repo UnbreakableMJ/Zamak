@@ -61,12 +61,12 @@ fn suites() -> Vec<(&'static str, Vec<TestCase>)> {
         (
             "boot-smoke",
             vec![
-                // bios-boot-smoke is deferred until M1-16 produces a
-                // real BIOS boot chain (stage1 MBR + stage2 + kernel
-                // partition). Today the "BIOS image" is a copy of the
-                // UEFI ESP, which BIOS firmware cannot boot — there's
-                // no MBR at LBA 0. Re-add this case once build-images.sh
-                // stamps the real stage1.
+                TestCase {
+                    name: "bios-boot-smoke",
+                    mode: BootMode::Bios,
+                    image_path: env_path("ZAMAK_BIOS_IMG", "target/zamak-bios.img"),
+                    expected_serial: vec!["ZAMAK", "LIMINE_PROTOCOL_OK"],
+                },
                 TestCase {
                     name: "uefi-boot-smoke",
                     mode: BootMode::Uefi,

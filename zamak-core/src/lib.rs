@@ -28,6 +28,7 @@ pub mod net;
 pub mod pe;
 pub mod pmm;
 pub mod protocol;
+pub mod ram_fat32;
 pub mod rng;
 pub mod theme_loader;
 pub mod tui;

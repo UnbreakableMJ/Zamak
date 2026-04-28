@@ -66,7 +66,6 @@ impl<'a> Fat32<'a> {
     pub fn parse(disk: &'a mut dyn BlockDevice, lba_start: u64) -> Result<Self, Error> {
         let mut buffer = [0u8; 512];
         disk.read_sectors(lba_start, 1, &mut buffer)?;
-
         let bpb = unsafe { *(buffer.as_ptr() as *const BiosParameterBlock) };
         Ok(Self {
             disk,
