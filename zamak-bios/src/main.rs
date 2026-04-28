@@ -9,11 +9,12 @@ extern crate alloc;
 pub mod allocator;
 pub mod boot_bundle;
 pub mod entry;
+#[cfg(feature = "legacy_trampoline")]
 pub mod fat32;
+#[cfg(feature = "legacy_trampoline")]
 pub mod input;
 pub mod mbr;
 pub mod paging;
-pub mod ram_disk;
 pub mod rm_io;
 // The trampoline-dependent BIOS-interrupt callers are only present
 // when the `legacy_trampoline` feature is enabled. M1-16 Path B moves
@@ -851,8 +852,12 @@ fn panic(_info: &PanicInfo) -> ! {
 #[no_mangle]
 pub extern "C" fn rust_eh_personality() {}
 
+/// Scans the BIOS extended-data area for the ACPI RSDP signature.
+/// Path B kmain reads `bundle.rsdp_phys` instead, since the real-mode
+/// orchestration already did this scan; only the legacy kmain still
+/// calls this at protected-mode time.
+#[cfg(feature = "legacy_trampoline")]
 pub fn find_rsdp() -> Option<u64> {
-    // Search 0xE0000 to 0xFFFFF
     let start = 0xE0000 as *const u8;
     for i in (0..0x20000).step_by(16) {
         // SAFETY: BIOS RSDP resides in 0xE0000..0xFFFFF; reading 8 bytes for signature.
