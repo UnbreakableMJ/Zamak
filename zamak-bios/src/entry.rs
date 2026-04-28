@@ -61,7 +61,7 @@ global_asm!(
     "",
     "    lgdt [gdt_descriptor]",
     "",
-    "    sti",                             // BIOS services need interrupts on
+    "    sti", // BIOS services need interrupts on
     // M1-16 Path B: run the entire real-mode I/O phase and populate
     // the BootDataBundle at phys 0x1000 before CR0.PE. On return,
     // every BIOS-backed datum kmain needs (E820, MBR, partition
@@ -77,7 +77,7 @@ global_asm!(
     // and SS:SP eventually corrupts the BIOS-handler frame.
     ".byte 0xE8",
     ".word rm_phaseb_orchestrate - . - 2",
-    "    cli",                             // back to IF=0 for the PE switch
+    "    cli", // back to IF=0 for the PE switch
     "",
     "    mov eax, cr0",
     "    or  eax, 1",
@@ -100,7 +100,7 @@ global_asm!(
     "    mov fs, ax",
     "    mov gs, ax",
     "    mov ss, ax",
-    "    mov esp, 0x8000",               // stable PM stack, above bundle
+    "    mov esp, 0x8000", // stable PM stack, above bundle
     // Print 'P' to COM1 so we know the 16→32 mode switch succeeded.
     "    mov dx, 0x3F8",
     "    mov al, 'P'",
