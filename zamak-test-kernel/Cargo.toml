@@ -3,7 +3,7 @@
 
 [package]
 name = "zamak-test-kernel"
-version = "0.8.5"
+version = "0.9.0"
 edition = "2021"
 description = "Minimal Limine-Protocol test kernel for zamak-test end-to-end smoke tests"
 license = "GPL-3.0-or-later"
@@ -20,7 +20,7 @@ name = "zamak-asm-verify-kernel"
 path = "src/asm_verify.rs"
 
 [dependencies]
-zamak-proto = { path = "../zamak-proto", version = "0.8.5" }
+zamak-proto = { path = "../zamak-proto", version = "0.9.0" }
 
 [profile.dev]
 panic = "abort"

@@ -4,11 +4,11 @@ version = 4
 
 [[package]]
 name = "zamak-proto"
-version = "0.8.5"
+version = "0.9.0"
 
 [[package]]
 name = "zamak-test-kernel"
-version = "0.8.5"
+version = "0.9.0"
 dependencies = [
  "zamak-proto",
 ]

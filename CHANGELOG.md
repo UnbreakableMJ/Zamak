@@ -12,6 +12,15 @@ All dates use ISO 8601 format (YYYY-MM-DD).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-04-28
+
+Closes M1-16: end-to-end BIOS Limine-Protocol kernel boot under
+QEMU. Every BIOS interrupt call now happens in real mode before
+the protected-mode transition; the trampoline that v0.8.5 left
+behind is gated behind a feature flag for regression
+comparisons. CI's `bios-boot-smoke` is back in the
+`boot-smoke` suite alongside the UEFI case.
+
 ### Changed
 
 - **M1-16 Path B**: BIOS boot path lifts every BIOS interrupt
