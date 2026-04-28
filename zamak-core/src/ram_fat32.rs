@@ -123,7 +123,7 @@ impl<'a> RamFat32<'a> {
         let cluster_size = self.sectors_per_cluster as usize * SECTOR_SIZE;
         let mut cluster = facts.first_cluster;
         let mut written = 0;
-        while written < total && cluster >= 2 && cluster < FAT32_END_OF_CHAIN {
+        while written < total && (2..FAT32_END_OF_CHAIN).contains(&cluster) {
             let bytes = match self.cluster_bytes(cluster) {
                 Some(b) => b,
                 None => break,
@@ -221,7 +221,7 @@ impl<'a> RamFat32<'a> {
                 ofs += DIR_ENTRY_SIZE;
             }
             cluster = self.next_cluster(cluster)?;
-            if cluster < 2 || cluster >= FAT32_END_OF_CHAIN {
+            if !(2..FAT32_END_OF_CHAIN).contains(&cluster) {
                 return None;
             }
         }
@@ -335,7 +335,7 @@ fn ascii_eq_ignore_case(a: &[u8], b: &[u8]) -> bool {
 }
 
 fn ascii_lower(b: u8) -> u8 {
-    if (b'A'..=b'Z').contains(&b) {
+    if b.is_ascii_uppercase() {
         b + 32
     } else {
         b
@@ -361,11 +361,7 @@ fn name_to_8_3(part: &str) -> [u8; 11] {
         if idx >= 11 {
             break;
         }
-        out[idx] = if (b'a'..=b'z').contains(&ch) {
-            ch - 32
-        } else {
-            ch
-        };
+        out[idx] = if ch.is_ascii_lowercase() { ch - 32 } else { ch };
         idx += 1;
     }
     out
@@ -446,7 +442,7 @@ mod tests {
 
         // LFN entry. seq=1 with bit 0x40 set → "last" (only segment).
         // Checksum field at 0x0D — we don't validate it so leave 0.
-        img[lfn + 0x00] = 0x41;
+        img[lfn] = 0x41;
         img[lfn + 0x0B] = ATTR_LFN;
         let positions: [usize; 13] = [
             0x01, 0x03, 0x05, 0x07, 0x09, 0x0E, 0x10, 0x12, 0x14, 0x16, 0x18, 0x1C, 0x1E,
