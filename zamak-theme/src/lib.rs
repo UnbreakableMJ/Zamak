@@ -242,7 +242,7 @@ impl Default for Theme {
     /// Primary accent: Material Design Blue 800 (#1565C0).
     /// Error: Material Design Red 700 (#D32F2F).
     /// On-surface: Material Design Grey 900 (#212121) adapted to Void Navy.
-    /// Background: Void Navy (#000027) from Steelbore palette.
+    /// Background: Void Navy (#000027) from Spacecraft Software palette.
     fn default() -> Self {
         Self {
             surface: SurfaceTokens {

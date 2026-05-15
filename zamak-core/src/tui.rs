@@ -248,7 +248,7 @@ pub fn draw_menu_with_wallpaper(
     }
 
     // 2. Header.
-    let title = "STEELBORE :: ZAMAK 0.6.9";
+    let title = "SPACECRAFT SOFTWARE :: ZAMAK 0.6.9";
     font.draw_string(canvas, 10, 10, title, brand_text, None);
     canvas.draw_rect(10, 24, canvas.width() - 20, 1, brand_bar);
 

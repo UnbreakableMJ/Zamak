@@ -1,8 +1,8 @@
 ---
 name: zamak
-description: ZAMAK bootloader host CLI — install stage1 MBR + stage2, enroll config BLAKE2B hashes into UEFI binaries, generate SPDX 2.3 SBOMs. Dual-mode (human + agent) per SB-SFRS-STEELBORE-CLI v1.0.0.
+description: ZAMAK bootloader host CLI — install stage1 MBR + stage2, enroll config BLAKE2B hashes into UEFI binaries, generate SPDX 2.3 SBOMs. Dual-mode (human + agent) per SS-SFRS-SPACECRAFT-SOFTWARE-CLI v1.0.0.
 license: GPL-3.0-or-later
-project: Steelbore
+project: Spacecraft Software
 component: Zamak
 version: 0.1.0
 entry_points:
@@ -135,6 +135,6 @@ zamak schema install --json | jq .
 
 - `../ZAMAK_Bootloader_PRD_v1.3.docx.md` — full product spec
 - `../TODO.md` — live implementation status
-- `../steelbore-dual-mode-cli-sfrs.docx` — CLI framework SFRS v1.0.0
+- `../spacecraft-software-dual-mode-cli-sfrs.docx` — CLI framework SFRS v1.0.0
 - `zamak describe --json` — live capability manifest (authoritative
   at runtime)

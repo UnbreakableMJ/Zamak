@@ -8,7 +8,7 @@
 //! `call_bios_int` 32→real→32 trampoline is gated behind the
 //! `legacy_trampoline` feature (see M1-16 Path B — all BIOS I/O now
 //! happens in real mode before CR0.PE). All assembly resides in
-//! `global_asm!` per Steelbore Standard §3.2.
+//! `global_asm!` per Spacecraft Software Standard §3.2.
 
 // Rust guideline compliant 2026-03-30
 

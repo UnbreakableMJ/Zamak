@@ -10,12 +10,16 @@ target/
 *.obj
 *.o
 
+# M6-3 Part 2 baseline staging (local-only, scp'd to test boxes)
+/dist/
+
 # Antigravity/Internal
 .gemini/
 
 # Claude Code session state + exported transcripts
 .claude/
 Chat.txt
+tmp.txt
 2026-*-this-session-is-being-continued-from-a-previous-c.txt
 
 # IDEs

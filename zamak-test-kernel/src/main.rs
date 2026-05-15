@@ -95,6 +95,35 @@ unsafe fn outb(port: u16, value: u8) {
 #[cfg(not(target_arch = "x86_64"))]
 unsafe fn outb(_port: u16, _value: u8) {}
 
+/// Reads the x86-64 Time Stamp Counter. Used to stamp the kernel's
+/// entry point so M6-3 Part 2 can compute bootloader overhead by
+/// comparing the same captured value across ZAMAK and Limine runs.
+#[cfg(target_arch = "x86_64")]
+fn rdtsc() -> u64 {
+    let lo: u32;
+    let hi: u32;
+    // SAFETY:
+    //   Preconditions: CPU supports rdtsc (every x86-64 part does).
+    //   Postconditions: returns the 64-bit TSC value.
+    //   Clobbers: EAX, EDX.
+    //   Worst-case: returns 0 on a CPU older than Pentium (none of
+    //               which can run a UEFI-loaded Limine-Protocol kernel).
+    unsafe {
+        core::arch::asm!(
+            "rdtsc",
+            out("eax") lo,
+            out("edx") hi,
+            options(nomem, nostack, preserves_flags),
+        );
+    }
+    ((hi as u64) << 32) | lo as u64
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+fn rdtsc() -> u64 {
+    0
+}
+
 /// Writes a NUL-terminated byte string to COM1.
 fn serial_write(s: &[u8]) {
     for &b in s {
@@ -103,12 +132,34 @@ fn serial_write(s: &[u8]) {
     }
 }
 
+/// Writes `n` to COM1 as unpadded ASCII decimal. `u64::MAX` is 20
+/// digits, so a 20-byte scratch buffer is sufficient.
+fn serial_write_u64(mut n: u64) {
+    if n == 0 {
+        serial_write(b"0");
+        return;
+    }
+    let mut buf = [0u8; 20];
+    let mut i = buf.len();
+    while n > 0 {
+        i -= 1;
+        buf[i] = b'0' + (n % 10) as u8;
+        n /= 10;
+    }
+    serial_write(&buf[i..]);
+}
+
 /// Kernel entry point per the Limine Protocol (§PROTOCOL.md).
 ///
 /// Receives no arguments — the bootloader has already set up long mode,
 /// paging, and a stack. We just log and exit.
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
+    // M6-3 Part 2: absolute TSC at hand-off, comparable across
+    // bootloaders running on the same physical box.
+    serial_write(b"KERNEL_ENTRY tsc=");
+    serial_write_u64(rdtsc());
+    serial_write(b"\n");
     serial_write(b"ZAMAK\n");
     serial_write(b"LIMINE_PROTOCOL_OK\n");
 

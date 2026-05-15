@@ -1,17 +1,17 @@
   
-**`PROJECT STEELBORE`**
+**`SPACECRAFT SOFTWARE`**
 
 **`ZAMAK Bootloader`**
 
 `Product Requirements Document (PRD)`
 
-| `Document ID:` | `SB-PRD-ZAMAK-001` |
+| `Document ID:` | `SS-PRD-ZAMAK-001` |
 | :---- | :---- |
 | `Version:` | `1.3.0` |
 | `Date:` | `2026-02-19` |
 | `Author:` | `Mohamed Hammad` |
 | `Status:` | `DRAFT` |
-| `Classification:` | `Internal — Steelbore Contributors` |
+| `Classification:` | `Internal — Spacecraft Software Contributors` |
 | `License:` | `GPL-3.0-or-later` |
 | `SPDX Identifier:` | `SPDX-License-Identifier: GPL-3.0-or-later` |
 | `Copyright:` | `© 2026 Mohamed Hammad. All rights reserved.` |
@@ -28,7 +28,7 @@
 
 `© 2026 Mohamed Hammad. All rights reserved.`
 
-`This document and its contents are the intellectual property of Mohamed Hammad, authored as part of Project Steelbore. No part of this document may be reproduced, distributed, or transmitted in any form or by any means without the prior written permission of the author, except as permitted under the terms of the GNU General Public License v3.0 or later (GPL-3.0-or-later).`
+`This document and its contents are the intellectual property of Mohamed Hammad, authored as part of Spacecraft Software. No part of this document may be reproduced, distributed, or transmitted in any form or by any means without the prior written permission of the author, except as permitted under the terms of the GNU General Public License v3.0 or later (GPL-3.0-or-later).`
 
 `The ZAMAK software described herein is licensed under the GPL-3.0-or-later. A copy of the license is available at gnu.org/licenses/gpl-3.0.html.`
 
@@ -38,13 +38,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 SPDX-FileCopyrightText: 2026 Mohamed Hammad
 
-`Trademarks: “Steelbore” and “ZAMAK” are trademarks of Mohamed Hammad. “Limine” is a trademark of its respective author(s). All other trademarks mentioned in this document are the property of their respective owners.`
+`Trademarks: “Spacecraft Software” and “ZAMAK” are trademarks of Mohamed Hammad. “Limine” is a trademark of its respective author(s). All other trademarks mentioned in this document are the property of their respective owners.`
 
 `Disclaimer: This document is provided “as is” without warranty of any kind, express or implied. The information contained herein is subject to change without notice. The author shall not be liable for any errors or omissions in this document.`
 
 # **`1. Executive Summary`**
 
-`ZAMAK is a ground-up rewrite of the Limine bootloader in the Rust programming language. It is a sub-project of Project Steelbore, an initiative to deliver memory-safe, auditable, and high-performance system-level tooling under the GPL-3.0-or-later license. ZAMAK retains full protocol and feature parity with Limine while leveraging Rust’s type system and ownership model to eliminate entire classes of memory-safety vulnerabilities inherent in the existing C codebase.`
+`ZAMAK is a ground-up rewrite of the Limine bootloader in the Rust programming language. It is a project of Spacecraft Software, an initiative to deliver memory-safe, auditable, and high-performance system-level tooling under the GPL-3.0-or-later license. ZAMAK retains full protocol and feature parity with Limine while leveraging Rust’s type system and ownership model to eliminate entire classes of memory-safety vulnerabilities inherent in the existing C codebase.`
 
 `The name “ZAMAK” is derived from the family of zinc–aluminium alloys used in precision die-casting—reflecting the project’s philosophy of producing a component that is strong, precise, and castable into any system mold.`
 
@@ -54,7 +54,7 @@ SPDX-FileCopyrightText: 2026 Mohamed Hammad
 
 ## **`1.2 Proposed Solution`**
 
-`ZAMAK replaces the entire C codebase with idiomatic,` \#\!\[no\_std\] `Rust while preserving the identical external interface: same configuration file format (`limine.conf`), same boot protocols, same Limine Protocol request/response ABI, same filesystem support, and same multi-architecture targeting. All architecture-specific assembly (boot sectors, trampolines, CPU mode transitions) is embedded directly in Rust source files via` core::arch::asm\! `/` global\_asm\! `macros, as mandated by the Steelbore standard. A dedicated Assembly Memory Safety framework (Section 3.9) ensures that these unavoidable` unsafe `assembly boundaries are as safe as mechanically possible.`
+`ZAMAK replaces the entire C codebase with idiomatic,` \#\!\[no\_std\] `Rust while preserving the identical external interface: same configuration file format (`limine.conf`), same boot protocols, same Limine Protocol request/response ABI, same filesystem support, and same multi-architecture targeting. All architecture-specific assembly (boot sectors, trampolines, CPU mode transitions) is embedded directly in Rust source files via` core::arch::asm\! `/` global\_asm\! `macros, as mandated by the Spacecraft Software Standard. A dedicated Assembly Memory Safety framework (Section 3.9) ensures that these unavoidable` unsafe `assembly boundaries are as safe as mechanically possible.`
 
 ## **`1.3 Success Criteria`**
 
@@ -84,7 +84,7 @@ SPDX-FileCopyrightText: 2026 Mohamed Hammad
 
 * `Interactive boot menu with Flanterm-compatible graphical terminal, live config editor with syntax highlighting and validation.`
 
-* `Color theme system (configured separately per Steelbore standard).`
+* `Color theme system (configured separately per Spacecraft Software Standard).`
 
 * `Assembly Memory Safety framework: safe Rust wrappers, newtype invariants, compile-time layout assertions, and structured SAFETY contracts for all asm! boundaries.`
 
@@ -112,11 +112,11 @@ SPDX-FileCopyrightText: 2026 Mohamed Hammad
 
 3. `UEFI firmware on target platforms conforms to UEFI Specification 2.9 or later.`
 
-4. `Contributors have read and accepted the Steelbore Contributor Agreement and the Pragmatic Rust Guidelines.`
+4. `Contributors have read and accepted the Spacecraft Software Contributor Agreement and the Pragmatic Rust Guidelines.`
 
-# **`3. Steelbore Standard Compliance`**
+# **`3. Spacecraft Software Standard Compliance`**
 
-`As a first-class Steelbore sub-project, ZAMAK must comply with every clause of the Steelbore standard. This section maps each requirement to the concrete design decisions in ZAMAK.`
+`As a first-class Spacecraft Software project, ZAMAK must comply with every clause of the Spacecraft Software Standard. This section maps each requirement to the concrete design decisions in ZAMAK.`
 
 ## **`3.1 Color Theme Support (Configured Separately)`**
 
@@ -138,11 +138,11 @@ zamak-theme.toml `uses TOML syntax and defines the following token groups:`
 
 ### *`3.1.2 Material Design Alignment`*
 
-`Where applicable, the default theme and any Steelbore-provided themes use color values drawn from the Material Design color system (github.com/material-components). This applies to the boot menu’s accent bar, selection highlight, scrollbar tint, and editor syntax-highlighting palette. Since ZAMAK renders to a framebuffer terminal (not a web view), Material Design is used as a color-token reference, not as a component library.`
+`Where applicable, the default theme and any Spacecraft Software-provided themes use color values drawn from the Material Design color system (github.com/material-components). This applies to the boot menu’s accent bar, selection highlight, scrollbar tint, and editor syntax-highlighting palette. Since ZAMAK renders to a framebuffer terminal (not a web view), Material Design is used as a color-token reference, not as a component library.`
 
 ## **`3.2 Inline Assembly (No Separate .asm Files)`**
 
-`The Steelbore standard mandates that all assembly code must reside within Rust source files. ZAMAK achieves this via Rust’s` core::arch::asm\! `macro for inline assembly and` core::arch::global\_asm\! `for module-level assembly blocks. The rationale is threefold: (a) the assembly is co-located with the Rust code that calls it, improving auditability; (b) the Rust compiler’s register allocator can participate in register selection for inline blocks; and (c) the build system does not need a separate assembler toolchain.`
+`The Spacecraft Software Standard mandates that all assembly code must reside within Rust source files. ZAMAK achieves this via Rust’s` core::arch::asm\! `macro for inline assembly and` core::arch::global\_asm\! `for module-level assembly blocks. The rationale is threefold: (a) the assembly is co-located with the Rust code that calls it, improving auditability; (b) the Rust compiler’s register allocator can participate in register selection for inline blocks; and (c) the build system does not need a separate assembler toolchain.`
 
 ### *`3.2.1 Assembly Modules in ZAMAK`*
 
@@ -189,7 +189,7 @@ zamak-theme.toml `uses TOML syntax and defines the following token groups:`
 
 ## **`3.5 Rust Guidelines`**
 
-`All ZAMAK code must conform to the Pragmatic Rust Guidelines as forked by the Steelbore project (github.com/UnbreakableMJ/rust-guidelines), which extends Microsoft’s Pragmatic Rust Guidelines. Key mandates include:`
+`All ZAMAK code must conform to the Pragmatic Rust Guidelines as forked by Spacecraft Software (github.com/UnbreakableMJ/rust-guidelines), which extends Microsoft’s Pragmatic Rust Guidelines. Key mandates include:`
 
 * `All public APIs must be documented with doc-comments including examples.`
 
@@ -241,7 +241,7 @@ zamak-theme.toml `uses TOML syntax and defines the following token groups:`
 
 ## **`3.9 Assembly Code Memory Safety`**
 
-`The Steelbore standard requires all assembly to live inside Rust source files (Section 3.2). This companion section defines the mandatory techniques for making those assembly boundaries as memory-safe as mechanically possible. Assembly code cannot be verified by the Rust compiler; these requirements compensate by shrinking the unverifiable surface area, enforcing invariants at the type level, and validating behavior at test time.`
+`The Spacecraft Software Standard requires all assembly to live inside Rust source files (Section 3.2). This companion section defines the mandatory techniques for making those assembly boundaries as memory-safe as mechanically possible. Assembly code cannot be verified by the Rust compiler; these requirements compensate by shrinking the unverifiable surface area, enforcing invariants at the type level, and validating behavior at test time.`
 
 ### *`3.9.1 Principle: Minimize Assembly Surface Area`*
 
@@ -319,7 +319,7 @@ asm\!("mov cr3, rax", in("rax") phys\_addr);
 
 ### *`3.9.6 Requirement: Structured SAFETY Contracts`*
 
-`The Steelbore standard requires` // SAFETY: `comments on all` unsafe `blocks. For assembly boundaries, ZAMAK elevates this to a structured contract format with four mandatory sections:`
+`The Spacecraft Software Standard requires` // SAFETY: `comments on all` unsafe `blocks. For assembly boundaries, ZAMAK elevates this to a structured contract format with four mandatory sections:`
 
 // SAFETY:
 
@@ -818,7 +818,7 @@ invalid \= "D32F2F"
 | `REF-02` | `Limine Boot Protocol Specification` | `PROTOCOL.md in Limine trunk` |
 | `REF-03` | `Limine Configuration Reference` | `CONFIG.md in Limine trunk` |
 | `REF-04` | `SPDX Specification` | `https://spdx.dev/` |
-| `REF-05` | `Pragmatic Rust Guidelines (Steelbore fork)` | `github.com/UnbreakableMJ/rust-guidelines` |
+| `REF-05` | `Pragmatic Rust Guidelines (Spacecraft Software fork)` | `github.com/UnbreakableMJ/rust-guidelines` |
 | `REF-06` | `Material Design Components` | `github.com/material-components` |
 | `REF-07` | `UEFI Specification 2.10` | `https://uefi.org/specs/UEFI/2.10/` |
 | `REF-08` | `Multiboot 1 Specification` | `GNU GRUB documentation` |
@@ -832,7 +832,7 @@ invalid \= "D32F2F"
 | `Version` | `Date` | `Author` | `Changes` |
 | :---- | :---- | :---- | :---- |
 | `1.0.0` | `2026-02-18` | `Mohamed Hammad` | `Initial PRD. Sections 1–11 covering architecture, protocols, config, testing, and release plan.` |
-| `1.1.0` | `2026-02-19` | `Mohamed Hammad` | `Added Section 3.9 (Assembly Code Memory Safety) with 11 subsections. Added FR-ASM-001 through FR-ASM-004. Applied Steelbore theme to document formatting.` |
+| `1.1.0` | `2026-02-19` | `Mohamed Hammad` | `Added Section 3.9 (Assembly Code Memory Safety) with 11 subsections. Added FR-ASM-001 through FR-ASM-004. Applied Spacecraft Software theme to document formatting.` |
 | `1.2.0` | `2026-02-19` | `Mohamed Hammad` | `Updated authorship to Mohamed Hammad. Added copyright and legal notices throughout: cover page, copyright page, SPDX headers, footer, license section, and end-of-document notice. Added Section 12 (Revision History).` |
 | `1.3.0` | `2026-03-09` | `Mohamed Hammad` | `Changed page size from US Letter to ISO A4 (210 × 297 mm). Forced page background color to Void Navy (#000027). Rescaled all table widths proportionally to fit A4 content area.` |
 
@@ -840,4 +840,4 @@ invalid \= "D32F2F"
 
 `© 2026 Mohamed Hammad. All rights reserved.`
 
-`Licensed under GPL-3.0-or-later as part of Project Steelbore.`
+`Licensed under GPL-3.0-or-later as part of Spacecraft Software.`

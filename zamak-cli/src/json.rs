@@ -12,7 +12,7 @@
 
 use std::fmt::Write as _;
 
-/// A JSON value in the Steelbore canonical form.
+/// A JSON value in the Spacecraft Software canonical form.
 #[derive(Debug, Clone)]
 #[allow(dead_code)] // Float + future-expansion variants
 pub enum Value {

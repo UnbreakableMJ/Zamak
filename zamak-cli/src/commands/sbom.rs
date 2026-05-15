@@ -167,7 +167,7 @@ fn build_spdx_document(
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
   "name": "zamak-{version}",
-  "documentNamespace": "https://steelbore.org/spdxdocs/zamak-{version}",
+  "documentNamespace": "https://SpacecraftSoftware.org/spdxdocs/zamak-{version}",
   "creationInfo": {{
     "created": "{created}",
     "creators": [

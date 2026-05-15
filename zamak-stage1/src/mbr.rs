@@ -3,7 +3,7 @@
 
 //! 512-byte MBR boot sector assembly.
 //!
-//! All code resides in `global_asm!` per Steelbore Standard §3.2.
+//! All code resides in `global_asm!` per Spacecraft Software Standard §3.2.
 //! Uses `.pushsection`/`.popsection` per §3.9.8 for position-sensitive
 //! placement at exactly 512 bytes.
 

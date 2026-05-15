@@ -13,7 +13,7 @@
 //!     "hint": "Run 'zamak describe --json' to list commands",
 //!     "timestamp": "2026-04-21T12:00:00Z",
 //!     "command": "zamak install --target /dev/sda",
-//!     "docs_url": "https://steelbore.dev/zamak/errors#not_found"
+//!     "docs_url": "https://SpacecraftSoftware.org/zamak/errors#not_found"
 //! }}
 //! ```
 

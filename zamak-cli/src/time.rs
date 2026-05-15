@@ -3,7 +3,7 @@
 
 //! ISO 8601 / UTC time helpers — no external deps.
 //!
-//! Steelbore Standard §2.3.1: timestamps MUST be ISO 8601 with
+//! Spacecraft Software Standard §2.3.1: timestamps MUST be ISO 8601 with
 //! explicit `Z` suffix. `--local-time` is explicitly prohibited.
 
 use std::time::{SystemTime, UNIX_EPOCH};

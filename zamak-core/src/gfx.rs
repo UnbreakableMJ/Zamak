@@ -10,7 +10,7 @@ pub struct Color {
     pub b: u8,
 }
 
-// Steelbore Palette (used only as fallback — prefer Theme tokens).
+// Spacecraft Software Palette (used only as fallback — prefer Theme tokens).
 pub const VOID_NAVY: Color = Color {
     r: 0x00,
     g: 0x00,
@@ -143,7 +143,7 @@ mod tests {
     }
 
     #[test]
-    fn palette_constants_match_steelbore_hex() {
+    fn palette_constants_match_brand_hex() {
         assert_eq!(
             MOLTEN_AMBER,
             Color {

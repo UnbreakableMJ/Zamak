@@ -5,7 +5,7 @@ SPDX-FileCopyrightText: 2026 Mohamed Hammad
 
 # Contributing to ZAMAK
 
-Thanks for your interest in ZAMAK — the Steelbore-ecosystem Rust
+Thanks for your interest in ZAMAK — the Spacecraft Software ecosystem Rust
 rewrite of the Limine bootloader. This document is the human
 contributor on-ramp; `CLAUDE.md`, `AGENTS.md`, and `SKILL.md` cover
 the machine / agent side.
@@ -29,7 +29,7 @@ the machine / agent side.
 ## Development setup
 
 ```
-git clone https://codeberg.org/steelbore/zamak
+git clone https://codeberg.org/spacecraft-software/zamak
 cd zamak/Zamak
 RUSTFLAGS='' cargo build
 RUSTFLAGS='' cargo test --workspace
@@ -83,7 +83,7 @@ Before opening a PR:
 
 ## CLI-specific expectations
 
-`zamak-cli` conforms to `SB-SFRS-STEELBORE-CLI v1.0.0`. New sub-
+`zamak-cli` conforms to `SS-SFRS-SPACECRAFT-SOFTWARE-CLI v1.0.0`. New sub-
 commands must:
 
 1. Register a `CommandSpec` in `src/schema.rs`.
@@ -100,6 +100,6 @@ command appears in the manifest.
 
 ## Code of Conduct
 
-Be kind. Assume good faith. The Steelbore project values rigour
+Be kind. Assume good faith. Spacecraft Software values rigour
 over speed and correctness over cleverness; feedback in that spirit
 is always welcome.

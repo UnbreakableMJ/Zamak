@@ -3,7 +3,7 @@
 
 //! Global CLI flag parser.
 //!
-//! Shared flags across every Steelbore CLI (SFRS §3.7):
+//! Shared flags across every Spacecraft Software CLI (SFRS §3.7):
 //! `--json`, `--format <fmt>`, `--fields a,b,c`, `--dry-run`,
 //! `--verbose`, `--quiet`, `--color=<auto|always|never>`,
 //! `--no-color`, `--yes`, `--force`, `--print0` / `-0`.

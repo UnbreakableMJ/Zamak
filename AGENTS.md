@@ -15,7 +15,7 @@ OpenAI Codex CLI, Cursor, Aider, and similar tools.
 - **Type:** Rust bootloader (BIOS + UEFI, x86-64 / AArch64 /
   RISC-V 64 / LoongArch64)
 - **Status:** active development; reference PRD v1.3.0
-- **Organisation:** Steelbore
+- **Organisation:** Spacecraft Software
 - **License:** GPL-3.0-or-later on every source file
 
 ## Coding conventions
@@ -63,7 +63,7 @@ OpenAI Codex CLI, Cursor, Aider, and similar tools.
 ## CLI conformance
 
 Every host CLI binary (`zamak-cli` today, future ones the same)
-must conform to `SB-SFRS-STEELBORE-CLI v1.0.0`:
+must conform to `SS-SFRS-SPACECRAFT-SOFTWARE-CLI v1.0.0`:
 
 - `--json` / `--format` / structured JSON error envelope on stderr
 - `schema` and `describe` sub-commands
@@ -84,7 +84,7 @@ Zamak/
 ├── CHANGELOG.md            # Keep-a-Changelog + ISO 8601 dates
 ├── CLAUDE.md               # Claude-Code-specific context
 ├── AGENTS.md               # (this file)
-├── SKILL.md                # Steelbore skill manifest
+├── SKILL.md                # Spacecraft Software skill manifest
 ├── CONTRIBUTING.md         # human-contributor guide
 ├── zamak-core/             # shared no-std library
 ├── zamak-cli/              # host CLI (dual-mode)

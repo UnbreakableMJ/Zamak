@@ -12,6 +12,16 @@ All dates use ISO 8601 format (YYYY-MM-DD).
 
 ## [Unreleased]
 
+### Changed
+
+- `zamak-test-kernel` emits a `KERNEL_ENTRY tsc=<u64>` line on
+  the Limine-Protocol entry point, before the existing
+  `ZAMAK` / `LIMINE_PROTOCOL_OK` sentinels. Lets M6-3 Part 2
+  compute bootloader-overhead deltas by capturing the same
+  kernel under ZAMAK vs Limine v10.x and subtracting the two
+  absolute TSC values. Additive output — existing
+  `boot-smoke` / `linux-bzimage` sentinel asserts unaffected.
+
 ## [0.9.0] - 2026-04-28
 
 Closes M1-16: end-to-end BIOS Limine-Protocol kernel boot under
@@ -390,7 +400,7 @@ bare-metal perf validation.
   - `zamak-uefi::paging` — arch-dispatching `build(boot_services, kernel) -> u64` that returns the per-arch root-table physical address (PML4 on x86, L0 on AArch64, Sv48 root on RISC-V, PGDH on LoongArch)
   - `zamak-uefi::main` refactored: deleted `stub_entry` and all `#[cfg(target_arch = "x86_64")]` gates on the shared boot path. Single arch-neutral entry point now dispatches through `paging::build` and `handoff::jump_to_kernel`. `cargo check --target aarch64-unknown-uefi` and `riscv64gc-unknown-none-elf` both clean.
   - `Permissions::KERNEL_LOAD_AREA` — RWX coarse preset for kernel-image mapping parity across arches until per-PHDR splitting is implemented
-- **SFRS dual-mode CLI** — `zamak-cli` now conforms to `SB-SFRS-STEELBORE-CLI v1.0.0`:
+- **SFRS dual-mode CLI** — `zamak-cli` now conforms to `SS-SFRS-SPACECRAFT-SOFTWARE-CLI v1.0.0`:
   - Global flags: `--json`, `--format <human|json|jsonl|yaml|csv|explore>`, `--fields`, `--dry-run`, `--verbose`, `--quiet`, `--color`, `--no-color`, `--yes`, `--force`, `--print0`
   - JSON envelope `{metadata:{tool,version,command,timestamp}, data:...}` via `OutputPolicy::emit`
   - Structured error envelope on stderr (`error.code/exit_code/message/hint/timestamp/command/docs_url/io_kind`) with stable `UPPER_SNAKE_CASE` codes
@@ -408,7 +418,7 @@ bare-metal perf validation.
 - Context files at `Zamak/` repo root: `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, `CONTRIBUTING.md`
 - Integration test matrix in `zamak-cli/tests/sfrs_conformance.rs` covering exit codes, TTY/non-TTY, `AI_AGENT=1`, `--dry-run`, control-char rejection, UTF-8 encoding, ANSI suppression, JSON Schema shape, `describe` enumeration
 - Crate rename: `libzamak` -> `zamak-core`, `zamak-loader` -> `zamak-uefi` (PRD §4.1)
-- Converted all `.asm` files to `global_asm!` in Rust source files (Steelbore §3.2)
+- Converted all `.asm` files to `global_asm!` in Rust source files (Spacecraft Software Standard §3.2)
 - Added `rustfmt.toml` project formatting configuration
 - Added `deny.toml` for `cargo-deny` license and CVE auditing
 - Added `CHANGELOG.md` (Keep a Changelog format)

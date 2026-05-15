@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Mohamed Hammad
 
 //! ZAMAK host-side CLI tool — dual-mode (human + agent) per
-//! SB-SFRS-STEELBORE-CLI v1.0.0.
+//! SS-SFRS-SPACECRAFT-SOFTWARE-CLI v1.0.0.
 //!
 //! # Commands
 //!

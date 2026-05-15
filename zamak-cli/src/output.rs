@@ -263,7 +263,7 @@ fn resolve_color(mode: ColorMode, format: Format, env: &EnvSnapshot) -> bool {
     env.stdout_is_tty
 }
 
-/// Steelbore six-token palette as ANSI 24-bit escapes (§3.1 brand).
+/// Spacecraft Software six-token palette as ANSI 24-bit escapes (§3.1 brand).
 /// No-op when `color` is false.
 pub struct Palette {
     pub color: bool,
@@ -334,7 +334,7 @@ pub fn emit_warn(policy: &OutputPolicy, msg: &str) {
     }
 }
 
-/// Minimal YAML 1.2 emitter. Only handles the Steelbore envelope
+/// Minimal YAML 1.2 emitter. Only handles the Spacecraft Software envelope
 /// shape (objects + arrays of primitives / nested objects). Not a
 /// general-purpose YAML encoder.
 fn to_yaml(v: &Value, depth: usize) -> String {

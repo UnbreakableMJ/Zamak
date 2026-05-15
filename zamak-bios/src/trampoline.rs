@@ -7,7 +7,7 @@
 //! AP after receiving a SIPI. It transitions the AP from 16-bit real
 //! mode through 32-bit protected mode to 64-bit long mode, then parks
 //! the AP waiting for a `goto_address`. All assembly resides in
-//! `global_asm!` per Steelbore Standard §3.2.
+//! `global_asm!` per Spacecraft Software Standard §3.2.
 
 // Rust guideline compliant 2026-03-30
 

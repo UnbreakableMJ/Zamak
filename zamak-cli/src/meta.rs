@@ -7,7 +7,7 @@ use crate::json::{obj, Value};
 
 pub const TOOL_NAME: &str = "zamak";
 pub const TOOL_VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const DOCS_BASE: &str = "https://steelbore.dev/zamak/docs";
+pub const DOCS_BASE: &str = "https://SpacecraftSoftware.org/zamak/docs";
 
 /// Builds the `metadata` portion of the JSON envelope per SFRS §4.3.
 pub fn envelope_metadata(command: &str) -> Value {

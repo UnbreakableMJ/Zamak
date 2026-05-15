@@ -5,7 +5,7 @@ SPDX-FileCopyrightText: 2026 Mohamed Hammad
 
 # ZAMAK Implementation Status — TODO
 
-**Reference:** `ZAMAK_Bootloader_PRD_v1.3.docx.md` (SB-PRD-ZAMAK-001 v1.3.0)
+**Reference:** `ZAMAK_Bootloader_PRD_v1.3.docx.md` (SS-PRD-ZAMAK-001 v1.3.0)
 **Generated:** 2026-04-21 (updated)
 **Current milestone target:** M6 — LoongArch64 + Polish (due 2027-06-01). M1–M5 functionally complete; remaining gates are release-tagging, CI artifact confirmation, and rustc upstream LoongArch-UEFI support.
 
@@ -33,7 +33,7 @@ SPDX-FileCopyrightText: 2026 Mohamed Hammad
 | M0-8 | `[✓]` | Create `zamak-stage1` as a proper Cargo crate (512-byte MBR, pure `global_asm!`, own linker script + target JSON) |
 | M0-9 | `[✓]` | Create `zamak-decompressor` crate (stage2 decompressor using `miniz_oxide`, loaded at 0x70000) |
 | M0-10 | `[✓]` | Create `zamak-cli` crate (host-side tool skeleton with subcommand stubs) |
-| M0-11 | `[✓]` | Create `zamak-theme` crate (theme parser with Steelbore palette defaults) |
+| M0-11 | `[✓]` | Create `zamak-theme` crate (theme parser with Spacecraft Software palette defaults) |
 | M0-12 | `[✓]` | Create `zamak-test` crate (QEMU integration test harness with serial capture) |
 | M0-13 | `[✓]` | Add `rustfmt.toml` project configuration |
 | M0-14 | `[✓]` | Add `deny.toml` for `cargo-deny` (license + CVE checks) |
@@ -43,7 +43,7 @@ SPDX-FileCopyrightText: 2026 Mohamed Hammad
 
 ---
 
-## Steelbore Standard Compliance — §3
+## Spacecraft Software Standard Compliance — §3
 
 ### §3.2 Inline Assembly — No Separate `.asm` Files (RESOLVED)
 
@@ -216,7 +216,7 @@ SPDX-FileCopyrightText: 2026 Mohamed Hammad
 
 ---
 
-## SFRS — Dual-Mode CLI (SB-SFRS-STEELBORE-CLI v1.0.0) — zamak-cli
+## SFRS — Dual-Mode CLI (SS-SFRS-SPACECRAFT-SOFTWARE-CLI v1.0.0) — zamak-cli
 
 | # | Status | Task |
 |---|--------|------|
@@ -228,10 +228,10 @@ SPDX-FileCopyrightText: 2026 Mohamed Hammad
 | SFRS-6 | `[✓]` | §3.5 / §4.3: structured JSON error envelope on stderr (`error.code`/`exit_code`/`message`/`hint`/`timestamp`/`command`/`docs_url`/`io_kind`) with stable `UPPER_SNAKE_CASE` codes via `error::emit` |
 | SFRS-7 | `[✓]` | §3.6: stdout=data / stderr=diagnostics split; `--fields a,b,c` projection via `Value::project`; `--format jsonl` streams each data row as one line |
 | SFRS-8 | `[✓]` | §3.7: noun-verb hierarchy with shared globals (`--json`, `--format`, `--fields`, `--dry-run`, `--verbose`, `--quiet`, `--color`, `--no-color`, `--yes`, `--force`, `--print0`); aliases hidden from `describe` / `schema` output |
-| SFRS-9 | `[✓]` | §4.2 / §4.4: Steelbore six-token palette via 24-bit ANSI (`output::Palette`); NO_COLOR / FORCE_COLOR / CLICOLOR / `--color={auto,always,never}` precedence; ANSI suppressed in every machine mode |
+| SFRS-9 | `[✓]` | §4.2 / §4.4: Spacecraft Software six-token palette via 24-bit ANSI (`output::Palette`); NO_COLOR / FORCE_COLOR / CLICOLOR / `--color={auto,always,never}` precedence; ANSI suppressed in every machine mode |
 | SFRS-10 | `[✓]` | §4.3: top-level JSON envelope `{metadata:{tool,version,command,timestamp}, data:...}` produced by `OutputPolicy::emit`; snake_case canonical; ISO 8601 strings; JSON null for missing values |
 | SFRS-11 | `[✓]` | §5: `--format explore` TUI via `ratatui` 0.29 + `crossterm` 0.28 behind Cargo feature `tui`; alt-screen; CUA + Vim keybinds (`↑↓`/`jk`, `/` filter, `s` sort, Enter detail, `e` export); TTY + non-agent guard with JSON fallback. Feature build verified clean (`cargo check --features tui`); all 95 zamak-cli tests still pass with the feature enabled |
-| SFRS-12 | `[✓]` | §6.3: `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, `CONTRIBUTING.md` at `Zamak/` repo root per Steelbore context-file format |
+| SFRS-12 | `[✓]` | §6.3: `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, `CONTRIBUTING.md` at `Zamak/` repo root per Spacecraft Software context-file format |
 | SFRS-13 | `[✓]` | §7.2: `validate` module — path canonicalization + allow-list (`safe_path`), control-byte rejection (`reject_control_chars`), numeric bounds (`check_bounds`), `--yes`/`--force` required for destructive ops in non-TTY (`confirm_destructive`) |
 | SFRS-14 | `[✓]` | §8.1 / §8.4: POSIX text records; `--print0` / `-0` global flag wired; `zamak completions <shell>` sub-command emits bash / zsh / fish / nushell scripts |
 | SFRS-15 | `[✓]` | §8.3: PowerShell-friendly JSON — single document (not NDJSON unless explicit), single-line stderr errors (`to_compact`), UTF-8 without BOM, Windows startup sets console CP 65001 via `SetConsoleOutputCP` |
